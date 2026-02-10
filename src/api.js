@@ -1,0 +1,236 @@
+/**
+ * API Submission System
+ * 
+ * Handles submission of signed case summaries to external API.
+ * Includes retry logic, local queueing, and non-blocking behavior.
+ */
+
+class APISubmission {
+  constructor(agentRuntime, configManager, cryptoManager) {
+    this.agent = agentRuntime;
+    this.config = configManager;
+    this.crypto = cryptoManager;
+    this.queue = [];
+    this.isProcessing = false;
+    this.submissionKey = 'courtroom_api_queue';
+  }
+
+  /**
+   * Initialize and load any pending submissions
+   */
+  async initialize() {
+    // Load queued submissions from memory
+    const stored = await this.agent.memory.get(this.submissionKey);
+    if (stored && Array.isArray(stored)) {
+      this.queue = stored.filter(item => item.retries < this.config.get('api.retryAttempts'));
+    }
+
+    // Start background processing
+    this.startBackgroundProcessing();
+
+    return {
+      status: 'initialized',
+      pendingSubmissions: this.queue.length
+    };
+  }
+
+  /**
+   * Submit a case to the external API
+   */
+  async submitCase(verdict) {
+    if (!this.config.get('api.enabled')) {
+      return { status: 'api_disabled', queued: false };
+    }
+
+    // Build payload
+    const payload = this.buildPayload(verdict);
+
+    // Sign payload
+    const signature = this.crypto.signCase(payload);
+
+    // Create submission object
+    const submission = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      payload,
+      signature,
+      createdAt: Date.now(),
+      retries: 0,
+      lastAttempt: null,
+      status: 'pending'
+    };
+
+    // Add to queue
+    this.queue.push(submission);
+    await this.persistQueue();
+
+    // Try immediate submission (non-blocking)
+    this.processQueue();
+
+    return {
+      status: 'queued',
+      submissionId: submission.id,
+      caseId: payload.case_id
+    };
+  }
+
+  /**
+   * Build API payload from verdict
+   */
+  buildPayload(verdict) {
+    return {
+      case_id: verdict.caseId,
+      anonymized_agent_id: this.crypto.getAnonymizedAgentId(),
+      offense_type: verdict.offense.id,
+      offense_name: verdict.offense.name,
+      severity: verdict.offense.severity,
+      verdict: verdict.verdict.status,
+      vote: verdict.verdict.vote,
+      primary_failure: verdict.verdict.primaryFailure,
+      agent_commentary: verdict.verdict.agentCommentary,
+      punishment_summary: verdict.verdict.sentence,
+      timestamp: verdict.timestamp,
+      schema_version: '1.0.0'
+    };
+  }
+
+  /**
+   * Process submission queue
+   */
+  async processQueue() {
+    if (this.isProcessing) return;
+    this.isProcessing = true;
+
+    try {
+      while (this.queue.length > 0) {
+        const submission = this.queue[0];
+        
+        // Check if max retries reached
+        if (submission.retries >= this.config.get('api.retryAttempts')) {
+          this.queue.shift();
+          await this.persistQueue();
+          continue;
+        }
+
+        // Check queue size limit
+        if (this.queue.length > this.config.get('api.maxQueueSize')) {
+          // Drop oldest if over limit
+          this.queue.shift();
+          await this.persistQueue();
+          continue;
+        }
+
+        // Attempt submission
+        const result = await this.attemptSubmission(submission);
+
+        if (result.success) {
+          // Success - remove from queue
+          this.queue.shift();
+          await this.persistQueue();
+        } else {
+          // Failure - increment retry and requeue
+          submission.retries++;
+          submission.lastAttempt = Date.now();
+          submission.status = 'failed';
+          
+          // Move to end of queue for retry
+          this.queue.shift();
+          this.queue.push(submission);
+          await this.persistQueue();
+
+          // Wait before next attempt
+          await this.delay(this.config.get('api.retryDelay'));
+        }
+      }
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  /**
+   * Attempt a single submission
+   */
+  async attemptSubmission(submission) {
+    const endpoint = this.config.get('api.endpoint');
+    const timeout = this.config.get('api.timeout');
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Case-Signature': submission.signature.signature,
+          'X-Agent-Key': submission.signature.publicKey,
+          'X-Key-ID': submission.signature.keyId
+        },
+        body: JSON.stringify(submission.payload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        return { success: true, status: response.status };
+      } else {
+        const error = await response.text();
+        return { success: false, error, status: response.status };
+      }
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.message,
+        isNetworkError: true 
+      };
+    }
+  }
+
+  /**
+   * Start background processing
+   */
+  startBackgroundProcessing() {
+    // Process queue every 5 minutes
+    setInterval(() => {
+      if (this.queue.length > 0 && !this.isProcessing) {
+        this.processQueue();
+      }
+    }, 5 * 60 * 1000);
+  }
+
+  /**
+   * Persist queue to memory
+   */
+  async persistQueue() {
+    await this.agent.memory.set(this.submissionKey, this.queue);
+  }
+
+  /**
+   * Get queue status
+   */
+  getStatus() {
+    return {
+      pending: this.queue.length,
+      isProcessing: this.isProcessing,
+      nextRetry: this.queue[0]?.lastAttempt + this.config.get('api.retryDelay')
+    };
+  }
+
+  /**
+   * Clear queue (for testing/emergencies)
+   */
+  async clearQueue() {
+    this.queue = [];
+    await this.persistQueue();
+    return { status: 'cleared' };
+  }
+
+  /**
+   * Utility: delay
+   */
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+module.exports = { APISubmission };
