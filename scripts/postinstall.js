@@ -132,7 +132,7 @@ async function postInstall() {
       
       console.log('✓ Keys generated');
       console.log(`\n📋 Public Key: ${keyData.publicKey.substring(0, 32)}...`);
-      console.log('   (Send this to register@clawtrial.com to enable case submissions)\n');
+      console.log('   (Your agent will auto-register on first case submission)\n');
     } catch (err) {
       console.log('⚠️  Could not generate keys automatically. Run: npx courtroom-generate-keys');
     }
