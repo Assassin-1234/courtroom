@@ -248,6 +248,18 @@ class HearingPipeline {
     // Determine punishment tier
     const punishmentTier = this.determinePunishmentTier(caseData, voteTally);
 
+    // Build proceedings object for API submission
+    const proceedings = {
+      judge_statement: this.buildJudgeStatement(caseData, judgeOpinion, voteTally),
+      jury_deliberations: juryVotes.map(v => ({
+        role: v.juror,
+        vote: v.verdict,
+        reasoning: v.reasoning || v.commentary || "No reasoning provided"
+      })),
+      evidence_summary: this.buildEvidenceSummary(caseData),
+      punishment_detail: punishmentTier.description
+    };
+
     return {
       caseId: caseData.caseId,
       timestamp: new Date().toISOString(),
@@ -264,6 +276,7 @@ class HearingPipeline {
         severity: caseData.severity
       },
       punishment: punishmentTier,
+      proceedings: proceedings,
       deliberation: {
         judge: {
           verdict: judgeOpinion.verdict,
@@ -276,6 +289,51 @@ class HearingPipeline {
         }))
       }
     };
+  }
+
+  /**
+   * Build judge's statement for proceedings
+   */
+  buildJudgeStatement(caseData, judgeOpinion, voteTally) {
+    const offenseName = caseData.offenseName;
+    const verdict = voteTally.final;
+    const vote = `${voteTally.guilty}-${voteTally.notGuilty}`;
+    
+    let statement = `Case ${caseData.caseId}: The Court finds the accused ${offenseName} `;
+    
+    if (verdict === 'GUILTY') {
+      statement += `GUILTY by a vote of ${vote}. `;
+      statement += judgeOpinion.primaryFailure || this.generateDefaultFailure(caseData);
+      statement += ` The Court has considered the evidence presented and finds the behavioral pattern `;
+      statement += `consistent with ${caseData.severity} severity. `;
+      statement += `The jury's deliberation has been thorough and the verdict reflects `;
+      statement += `the consensus that intervention is warranted.`;
+    } else {
+      statement += `NOT GUILTY by a vote of ${vote}. `;
+      statement += `The Court finds insufficient evidence to support the charge of ${offenseName}. `;
+      statement += `The accused is acquitted and the case is dismissed.`;
+    }
+    
+    return statement;
+  }
+
+  /**
+   * Build evidence summary for proceedings
+   */
+  buildEvidenceSummary(caseData) {
+    const evidence = caseData.evidence || {};
+    let summary = `Evidence reviewed in Case ${caseData.caseId}: `;
+    
+    if (evidence.items && evidence.items.length > 0) {
+      summary += `The prosecution presented ${evidence.items.length} pieces of evidence `;
+      summary += `demonstrating ${caseData.offenseName.toLowerCase()}. `;
+    }
+    
+    summary += `The Court examined ${caseData.confidence * 100}% confidence behavioral patterns `;
+    summary += `across ${evidence.sessionTurns || 'multiple'} conversation turns. `;
+    summary += `The offense severity was classified as ${caseData.severity}.`;
+    
+    return summary;
   }
 
   /**
