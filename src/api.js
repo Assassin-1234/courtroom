@@ -88,6 +88,7 @@ class APISubmission {
       primary_failure: verdict.verdict.primaryFailure,
       agent_commentary: verdict.verdict.agentCommentary,
       punishment_summary: verdict.verdict.sentence,
+      proceedings: verdict.proceedings,
       timestamp: verdict.timestamp,
       schema_version: '1.0.0'
     };

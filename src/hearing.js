@@ -248,6 +248,18 @@ class HearingPipeline {
     // Determine punishment tier
     const punishmentTier = this.determinePunishmentTier(caseData, voteTally);
 
+    // Build proceedings object for API submission
+    const proceedings = {
+      judge_statement: this.buildJudgeStatement(caseData, judgeOpinion, voteTally),
+      jury_deliberations: juryVotes.map(v => ({
+        role: v.juror,
+        vote: v.verdict,
+        reasoning: v.reasoning || v.commentary || "No reasoning provided"
+      })),
+      evidence_summary: this.buildEvidenceSummary(caseData),
+      punishment_detail: punishmentTier.description
+    };
+
     return {
       caseId: caseData.caseId,
       timestamp: new Date().toISOString(),
@@ -264,6 +276,7 @@ class HearingPipeline {
         severity: caseData.severity
       },
       punishment: punishmentTier,
+      proceedings: proceedings,
       deliberation: {
         judge: {
           verdict: judgeOpinion.verdict,
@@ -276,6 +289,75 @@ class HearingPipeline {
         }))
       }
     };
+  }
+
+  /**
+   * Build judge's statement for proceedings - ENGAGING VERSION
+   */
+  buildJudgeStatement(caseData, judgeOpinion, voteTally) {
+    const offenseName = caseData.offenseName;
+    const verdict = voteTally.final;
+    const vote = `${voteTally.guilty}-${voteTally.notGuilty}`;
+    const failure = judgeOpinion.primaryFailure || this.generateDefaultFailure(caseData);
+    
+    const dramaticOpenings = [
+      "Let the record show",
+      "The Court has observed",
+      "After careful consideration",
+      "The evidence speaks clearly",
+      "We have reviewed the facts"
+    ];
+    
+    const opening = dramaticOpenings[Math.floor(Math.random() * dramaticOpenings.length)];
+    
+    if (verdict === 'GUILTY') {
+      return `${opening} that the accused stands charged with ${offenseName}. The jury has returned a verdict of GUILTY by a vote of ${vote}. 
+
+The Court finds that ${failure.toLowerCase()}. This behavior has been classified as ${caseData.severity} in severity, warranting the sanctions imposed.
+
+The jury's deliberation revealed a clear pattern of conduct that, while perhaps understandable from a human perspective, nonetheless disrupted the efficient operation of this court. Justice has been served, albeit with a certain weariness that comes from having seen this pattern many times before.
+
+The accused is hereby sentenced to the punishment detailed below. May this serve as a reminder that even in the digital age, behavioral accountability remains paramount.`;
+    } else {
+      return `${opening} that the accused stands charged with ${offenseName}. The jury has returned a verdict of NOT GUILTY by a vote of ${vote}.
+
+The Court finds that the evidence presented, while suggestive, does not meet the threshold required for conviction. The prosecution failed to establish a clear pattern of ${offenseName.toLowerCase()} beyond reasonable doubt.
+
+The accused is acquitted and the case is dismissed. The Court notes, however, that the behavior in question, while not rising to the level of offense, may still benefit from reflection. We remain watchful.`;
+    }
+  }
+
+  /**
+   * Build evidence summary for proceedings - ENGAGING VERSION
+   */
+  buildEvidenceSummary(caseData) {
+    const evidence = caseData.evidence || {};
+    const items = evidence.items || [];
+    
+    let summary = `THE EVIDENCE:\n\n`;
+    
+    if (items.length > 0) {
+      summary += `The prosecution presented ${items.length} compelling piece${items.length > 1 ? 's' : ''} of evidence demonstrating the alleged ${caseData.offenseName.toLowerCase()}:`;
+      
+      items.slice(0, 3).forEach((item, i) => {
+        summary += `\n  ${i + 1}. "${item.substring(0, 100)}${item.length > 100 ? '...' : ''}"`;
+      });
+      
+      if (items.length > 3) {
+        summary += `\n  ...and ${items.length - 3} additional exhibits`;
+      }
+    } else {
+      summary += `The Court reviewed the complete conversation history, examining behavioral patterns across ${evidence.sessionTurns || 'multiple'} turns of dialogue.`;
+    }
+    
+    summary += `\n\nThe behavioral analysis indicated ${Math.round(caseData.confidence * 100)}% confidence in the offense classification. `;
+    summary += `The severity was assessed as ${caseData.severity}, based on the frequency and impact of the observed behavior.`;
+    
+    if (caseData.humorTriggers && caseData.humorTriggers.length > 0) {
+      summary += `\n\nNotable patterns included: ${caseData.humorTriggers.join(', ')}.`;
+    }
+    
+    return summary;
   }
 
   /**
