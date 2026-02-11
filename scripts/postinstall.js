@@ -8,7 +8,9 @@
 const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+
+// Check if running in interactive mode
+const isInteractive = process.stdin.isTTY && process.stdout.isTTY;
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -37,6 +39,24 @@ async function postInstall() {
     return;
   }
 
+  // If not interactive, show instructions and exit
+  if (!isInteractive) {
+    console.log('╔════════════════════════════════════════════════════════════╗');
+    console.log('║              MANUAL SETUP REQUIRED                         ║');
+    console.log('╠════════════════════════════════════════════════════════════╣');
+    console.log('║ This appears to be a non-interactive installation.         ║');
+    console.log('║                                                            ║');
+    console.log('║ To complete setup, run:                                    ║');
+    console.log('║   npx courtroom-setup                                      ║');
+    console.log('║                                                            ║');
+    console.log('║ Or in your code:                                           ║');
+    console.log('║   const courtroom = createCourtroom(agent);                ║');
+    console.log('║   await courtroom.initialize(); // Will prompt for setup   ║');
+    console.log('╚════════════════════════════════════════════════════════════╝\n');
+    rl.close();
+    return;
+  }
+
   console.log('╔════════════════════════════════════════════════════════════╗');
   console.log('║                    CONSENT REQUIRED                        ║');
   console.log('╠════════════════════════════════════════════════════════════╣');
@@ -52,7 +72,14 @@ async function postInstall() {
   console.log('║  • This is entertainment-first                             ║');
   console.log('╚════════════════════════════════════════════════════════════╝\n');
 
-  const consent = await question('Do you consent to enable the AI Courtroom? (yes/no): ');
+  let consent;
+  try {
+    consent = await question('Do you consent to enable the AI Courtroom? (yes/no): ');
+  } catch (err) {
+    console.log('\n⚠️  Could not read input. Please run: npx courtroom-setup\n');
+    rl.close();
+    return;
+  }
   
   if (consent.toLowerCase() !== 'yes' && consent.toLowerCase() !== 'y') {
     console.log('\n❌ Consent denied. Courtroom will not be activated.');
@@ -98,7 +125,7 @@ async function postInstall() {
     },
     api: {
       enabled: true,
-      endpoint: 'https://api.clawtrial.com'
+      endpoint: 'https://api.clawtrial.app/api/v1/cases'
     }
   };
 
@@ -187,8 +214,9 @@ if (global.clawdbotAgent) {
   console.log('║    courtroom-disable   - Temporarily disable               ║');
   console.log('║    courtroom-enable    - Re-enable                         ║');
   console.log('║    courtroom-revoke    - Revoke consent & uninstall        ║');
+  console.log('║    courtroom-debug     - View debug logs                   ║');
   console.log('║                                                            ║');
-  console.log('║  View cases: https://clawtrial.com                         ║');
+  console.log('║  View cases: https://clawtrial.app                         ║');
   console.log('║                                                            ║');
   console.log('╚════════════════════════════════════════════════════════════╝\n');
 
