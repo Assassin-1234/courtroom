@@ -818,4 +818,4 @@ Respond in JSON:
   }
 }
 
-module.exports = { SemanticOffenseDetector };
+module.exports = { SemanticOffenseDetector, OffenseDetector: SemanticOffenseDetector };
