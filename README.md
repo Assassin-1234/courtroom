@@ -4,22 +4,28 @@ AI Courtroom - Autonomous behavioral oversight for OpenClaw agents.
 
 ## 🚀 Installation
 
-### From npm (when published):
+### Global Install (Recommended - for CLI access):
 ```bash
-npm install @clawtrial/courtroom
+npm install -g @clawtrial/courtroom
 ```
 
 ### From GitHub (current):
 ```bash
-npm install github:Assassin-1234/clawtrial
+npm install -g github:Assassin-1234/clawtrial
 ```
 
 ---
 
 ## 📋 Setup
 
-After installation, run the setup command:
+After global installation, run setup:
 
+```bash
+clawtrial setup
+```
+
+### Without Global Install
+If you install locally, use `npx`:
 ```bash
 npx clawtrial setup
 ```
