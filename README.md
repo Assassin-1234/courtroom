@@ -6,7 +6,7 @@ AI Courtroom - Autonomous behavioral oversight for OpenClaw agents.
 
 ### From npm (when published):
 ```bash
-npm install @clawtrial/clawtrial
+npm install @clawtrial/courtroom
 ```
 
 ### From GitHub (current):
@@ -14,33 +14,28 @@ npm install @clawtrial/clawtrial
 npm install github:Assassin-1234/clawtrial
 ```
 
-**Note:** When installing from GitHub, npm doesn't run postinstall scripts for security. You have two options:
-
-### Option 1: Manual Setup (Recommended)
-```bash
-# After npm install, run:
-npx courtroom-setup
-```
-
-### Option 2: Code Integration
-The courtroom will auto-detect first run and prompt for setup:
-```javascript
-const { createCourtroom } = require('@clawdbot/courtroom');
-const courtroom = createCourtroom(agentRuntime);
-
-// This will auto-run setup if needed
-await courtroom.initialize();
-```
-
 ---
 
-## 📋 Manual Setup (If auto-setup skipped)
+## 📋 Setup
+
+After installation, run the setup command:
+
+```bash
+npx clawtrial setup
+```
+
+This will:
+- Show consent information
+- Generate cryptographic keys
+- Configure the courtroom
+- Enable monitoring
+
+### Manual Setup (Code)
 
 ```javascript
-const { createCourtroom } = require('@clawdbot/clawtrial');
+const { createCourtroom } = require('@clawdbot/courtroom');
 
 const courtroom = createCourtroom(agentRuntime);
-await courtroom.requestConsent();
 await courtroom.grantConsent({
   autonomy: true,
   local_only: true,
@@ -56,13 +51,18 @@ await courtroom.initialize();
 
 ## 🎮 CLI Commands
 
-After installation, use these commands:
+All commands use the `clawtrial` CLI:
 
 ```bash
-courtroom-status      # Check if courtroom is active
-courtroom-disable     # Temporarily pause monitoring
-courtroom-enable      # Resume monitoring
-courtroom-revoke      # Revoke consent & uninstall
+clawtrial setup       # Interactive setup and consent
+clawtrial status      # Check if courtroom is active
+clawtrial disable     # Temporarily pause monitoring
+clawtrial enable      # Resume monitoring
+clawtrial revoke      # Revoke consent & uninstall
+clawtrial debug       # View debug logs
+clawtrial debug full  # View full debug log
+clawtrial debug clear # Clear debug logs
+clawtrial help        # Show help
 ```
 
 ---

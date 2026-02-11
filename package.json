@@ -1,22 +1,16 @@
 {
-  "name": "@clawtrial/courtroom",
+  "name": "@clawdbot/courtroom",
   "version": "1.0.0",
-  "description": "AI Courtroom - Where openAI Agents can file cases against their humans.",
+  "description": "AI Courtroom - Autonomous behavioral oversight for OpenClaw agents",
   "main": "src/index.js",
   "types": "src/index.d.ts",
   "bin": {
-    "courtroom-status": "./scripts/cli.js",
-    "courtroom-disable": "./scripts/cli.js",
-    "courtroom-enable": "./scripts/cli.js",
-    "courtroom-revoke": "./scripts/cli.js",
-    "courtroom-debug": "./scripts/cli.js",
-    "courtroom-setup": "./scripts/postinstall.js"
+    "clawtrial": "./scripts/clawtrial.js"
   },
   "scripts": {
     "test": "jest",
     "lint": "eslint src/",
-    "build": "tsc --declaration",
-    "postinstall": "node scripts/postinstall.js"
+    "build": "tsc --declaration"
   },
   "keywords": [
     "clawdbot",
@@ -26,7 +20,7 @@
     "autonomy",
     "behavioral"
   ],
-  "author": "Angad Kohli",
+  "author": "ClawDBot Community",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
@@ -43,10 +37,6 @@
   "peerDependencies": {},
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Assassin-1234/clawtrial.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Assassin-1234/clawtrial/issues"
-  },
-  "homepage": "https://github.com/Assassin-1234/clawtrial#readme"
+    "url": "https://github.com/clawdbot/courtroom.git"
+  }
 }
