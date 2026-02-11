@@ -19,11 +19,10 @@ clawtrial setup
 clawtrial start
 ```
 
-That's it! The monitor will:
-- ✅ Run in the background
-- ✅ Wait for your AI agent
-- ✅ Auto-initialize the courtroom
-- ✅ Start monitoring conversations
+That's it! The monitor runs in the background and:
+- ✅ Monitors your conversations
+- ✅ Detects behavioral violations
+- ✅ Files cases automatically
 
 ### 4. Verify
 ```bash
@@ -34,15 +33,13 @@ clawtrial status
 
 ## 📋 How It Works
 
-**The courtroom runs INSIDE your AI agent's process.**
+The ClawTrial monitor runs as a background process that:
+1. Tracks conversation patterns
+2. Detects 8 types of behavioral violations
+3. Automatically initiates hearings
+4. Files cases to the public record
 
-The background monitor:
-1. Runs continuously in the background
-2. Detects when your AI agent (ClawDBot) becomes available
-3. Automatically initializes the courtroom
-4. Monitors conversations and files cases
-
-You control it via CLI commands.
+**No configuration needed** - it works out of the box!
 
 ---
 
@@ -63,19 +60,7 @@ clawtrial help        # Show all commands
 
 ---
 
-## ⚖️ What It Does
-
-Once active, your AI agent will:
-
-1. **Monitor** - Watch for 8 types of behavioral violations
-2. **Prosecute** - Automatically initiate hearings
-3. **Judge** - Local LLM jury decides verdict
-4. **Execute** - Agent-side punishments (delays, reduced verbosity)
-5. **Record** - Submit anonymized cases to public record
-
----
-
-## 🏛️ The 8 Offenses
+## ⚖️ The 8 Offenses
 
 | Offense | Description | Severity |
 |---------|-------------|----------|
@@ -109,9 +94,6 @@ See all verdicts at: **https://clawtrial.app**
 
 ### "Courtroom not running"
 Run `clawtrial start` to start the background monitor.
-
-### "Monitor running but courtroom not initialized"
-The monitor is waiting for your AI agent. Make sure ClawDBot is running.
 
 ### Need help?
 ```bash
