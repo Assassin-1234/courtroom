@@ -172,11 +172,32 @@ if (global.clawdbotAgent) {
     log('✓ Auto-initialization configured');
   }
 
+  // Try to initialize immediately if agent is available
+  const { detectAgentRuntime } = require('../src/environment');
+  const agentInfo = detectAgentRuntime();
+  
+  if (agentInfo) {
+    log('\n🚀 Agent detected! Initializing courtroom...');
+    try {
+      const { createCourtroom } = require('../src/index');
+      const courtroom = createCourtroom(agentInfo.agent);
+      const result = await courtroom.initialize();
+      
+      if (result.status === 'initialized') {
+        log('✅ Courtroom initialized and monitoring!');
+      } else {
+        log(`⚠️  Courtroom status: ${result.status}`);
+      }
+    } catch (err) {
+      log(`⚠️  Could not auto-initialize: ${err.message}`);
+    }
+  }
+
   log('\n╔════════════════════════════════════════════════════════════╗');
   log('║              🎉 SETUP COMPLETE! 🎉                         ║');
   log('╠════════════════════════════════════════════════════════════╣');
   log('║                                                            ║');
-  log('║  ClawTrial is now active and monitoring!                   ║');
+  log('║  ClawTrial is configured and ready!                        ║');
   log('║                                                            ║');
   log('║  Commands:                                                 ║');
   log('║    clawtrial status    - Check status                      ║');
@@ -200,18 +221,32 @@ function status() {
     return;
   }
 
+  // Check if courtroom is running via status file
+  const { getCourtroomStatus } = require('../src/daemon');
+  const runtimeStatus = getCourtroomStatus();
+
   log('\n🏛️  ClawTrial Status\n');
-  log(`Status: ${config.enabled !== false ? '✅ Active' : '⏸️  Disabled'}`);
+  log(`Config: ${config.enabled !== false ? '✅ Active' : '⏸️  Disabled'}`);
   log(`Consent: ${config.consent?.granted ? '✅ Granted' : '❌ Not granted'}`);
   log(`Installed: ${new Date(config.installedAt).toLocaleDateString()}`);
   log(`Agent Type: ${config.agent?.type || 'generic'}`);
-  log(`Detection: ${config.detection?.enabled ? '✅ Enabled' : '❌ Disabled'}`);
-  log(`API Submission: ${config.api?.enabled ? '✅ Enabled' : '❌ Disabled'}`);
-  log(`Endpoint: ${config.api?.endpoint || 'Not set'}`);
+  
+  if (runtimeStatus.running) {
+    log(`\n🏛️  Courtroom: ✅ Running`);
+    log(`  Process ID: ${runtimeStatus.pid}`);
+    log(`  Cases Filed: ${runtimeStatus.casesFiled || 0}`);
+    if (runtimeStatus.lastCase) {
+      log(`  Last Case: ${new Date(runtimeStatus.lastCase.timestamp).toLocaleString()}`);
+    }
+  } else {
+    log(`\n🏛️  Courtroom: ⏸️  Not running`);
+    log('  The courtroom needs to be loaded by your AI agent.');
+    log('  It will auto-start when the agent loads the package.');
+  }
   
   if (fs.existsSync(keysPath)) {
     const keys = JSON.parse(fs.readFileSync(keysPath, 'utf8'));
-    log(`Public Key: ${keys.publicKey.substring(0, 32)}...`);
+    log(`\n📋 Public Key: ${keys.publicKey.substring(0, 32)}...`);
   }
   log('');
 }
@@ -251,7 +286,7 @@ function enable() {
   config.enabled = true;
   saveConfig(config);
   log('\n✅ ClawTrial enabled\n');
-  log('The agent is now monitoring for behavioral violations.\n');
+  log('The agent will start monitoring when it loads the courtroom.\n');
 }
 
 // Revoke command
@@ -286,6 +321,9 @@ async function revoke() {
     
     const initPath = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_auto_init.js');
     if (fs.existsSync(initPath)) fs.unlinkSync(initPath);
+    
+    const statusPath = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_status.json');
+    if (fs.existsSync(statusPath)) fs.unlinkSync(statusPath);
     
     log('\n✅ Consent revoked and all data deleted.\n');
   } else {
@@ -387,15 +425,27 @@ function diagnose() {
     log(`\nKeys: ❌ Not found`);
   }
   
-  // Check agent runtime
-  const agentInfo = detectAgentRuntime();
-  if (agentInfo) {
-    log(`\nAgent Runtime: ✅ ${agentInfo.type}`);
+  // Check if courtroom is running
+  const { getCourtroomStatus } = require('../src/daemon');
+  const runtimeStatus = getCourtroomStatus();
+  
+  if (runtimeStatus.running) {
+    log(`\n🏛️  Courtroom: ✅ Running`);
+    log(`  Process ID: ${runtimeStatus.pid}`);
+    log(`  Started: ${new Date(runtimeStatus.startedAt).toLocaleString()}`);
+    log(`  Cases Filed: ${runtimeStatus.casesFiled || 0}`);
   } else {
-    log(`\nAgent Runtime: ❌ Not detected`);
-    log('  The courtroom needs an AI agent to monitor.');
-    log('  If using ClawDBot, make sure it\'s running.');
-    log('  For custom agents, pass the agent to createCourtroom(agent).');
+    log(`\n🏛️  Courtroom: ⏸️  Not running`);
+    
+    // Check if agent is available in this process
+    const agentInfo = detectAgentRuntime();
+    if (agentInfo) {
+      log('  Agent detected in current process');
+      log('  Run: clawtrial setup to initialize');
+    } else {
+      log('  The courtroom runs inside your AI agent process');
+      log('  It will auto-start when the agent loads the package');
+    }
   }
   
   // Check debug logs
@@ -411,12 +461,10 @@ function diagnose() {
   
   if (!config) {
     log('Next step: Run "clawtrial setup"');
-  } else if (!agentInfo) {
-    log('Next step: Ensure your AI agent is running');
-  } else if (config.enabled === false) {
-    log('Next step: Run "clawtrial enable"');
+  } else if (!runtimeStatus.running) {
+    log('Status: Configured, waiting for agent to load courtroom');
   } else {
-    log('Status: Ready to monitor! 🎉');
+    log('Status: Fully operational! 🎉');
   }
   log('');
 }

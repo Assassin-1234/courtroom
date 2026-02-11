@@ -7,6 +7,10 @@ const fs = require('fs');
 const path = require('path');
 const { Courtroom } = require('./index');
 const { logger } = require('./debug');
+const { StatusManager } = require('./daemon');
+
+const CLAWDBOT_DIR = path.join(process.env.HOME || '', '.clawdbot');
+const CONFIG_PATH = path.join(CLAWDBOT_DIR, 'courtroom_config.json');
 
 // Auto-detect ClawDBot environment
 function isClawDBot() {
@@ -15,7 +19,7 @@ function isClawDBot() {
     globalAgent: typeof global.clawdbotAgent !== 'undefined',
     globalAgentAlt: typeof global.agent !== 'undefined',
     configDir: fs.existsSync('/home/angad/.clawdbot'),
-    configDirAlt: fs.existsSync(path.join(process.env.HOME || '', '.clawdbot'))
+    configDirAlt: fs.existsSync(CLAWDBOT_DIR)
   };
 
   logger.debug('AUTOSTART', 'Environment checks', checks);
@@ -44,15 +48,13 @@ function getAgentRuntime() {
 
 // Check if config exists and has consent
 function checkConfig() {
-  const configPath = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_config.json');
-  
-  if (!fs.existsSync(configPath)) {
+  if (!fs.existsSync(CONFIG_PATH)) {
     logger.info('AUTOSTART', 'No config found, skipping auto-start');
     return { exists: false, config: null };
   }
 
   try {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
     logger.info('AUTOSTART', 'Config loaded', { 
       hasConsent: config.consent?.granted,
       enabled: config.enabled !== false 
@@ -77,20 +79,33 @@ async function autoStart() {
   
   if (!exists) {
     logger.info('AUTOSTART', 'No config, user needs to run setup');
-    console.log('\n🏛️  ClawTrial not configured. Run: npx courtroom-setup\n');
+    console.log('\n🏛️  ClawTrial not configured. Run: clawtrial setup\n');
     return null;
   }
 
   if (!config.consent?.granted) {
     logger.info('AUTOSTART', 'Consent not granted, skipping');
-    console.log('\n🏛️  ClawTrial requires consent. Run: npx courtroom-setup\n');
+    console.log('\n🏛️  ClawTrial requires consent. Run: clawtrial setup\n');
     return null;
   }
 
   if (config.enabled === false) {
     logger.info('AUTOSTART', 'Courtroom disabled in config');
-    console.log('\n🏛️  ClawTrial is disabled. Run: courtroom-enable\n');
+    console.log('\n🏛️  ClawTrial is disabled. Run: clawtrial enable\n');
     return null;
+  }
+
+  // Check if already running
+  const existingStatus = StatusManager.load();
+  if (existingStatus && existingStatus.running) {
+    try {
+      process.kill(existingStatus.pid, 0);
+      logger.info('AUTOSTART', 'Courtroom already running');
+      return null;
+    } catch (err) {
+      // Process not running, continue
+      logger.info('AUTOSTART', 'Stale status file found, continuing');
+    }
   }
 
   // Get agent runtime

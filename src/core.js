@@ -10,6 +10,8 @@ const { HearingPipeline } = require('./hearing');
 const { PunishmentSystem } = require('./punishment');
 const { CryptoManager } = require('./crypto');
 const { APISubmission } = require('./api');
+const { StatusManager } = require('./daemon');
+const { logger } = require('./debug');
 
 class CourtroomCore {
   constructor(agentRuntime, configManager) {
@@ -27,12 +29,15 @@ class CourtroomCore {
     this.enabled = false;
     this.evaluationCount = 0;
     this.caseCount = 0;
+    this.statusManager = new StatusManager();
   }
 
   /**
    * Initialize all subsystems
    */
   async initialize() {
+    logger.info('CORE', 'Initializing courtroom core');
+    
     // Initialize crypto first (needed for API)
     await this.crypto.initialize();
     
@@ -44,6 +49,16 @@ class CourtroomCore {
     this.registerAutonomyHook();
     
     this.enabled = true;
+    
+    // Update status for CLI
+    this.statusManager.update({
+      running: true,
+      initialized: true,
+      agentType: 'clawdbot',
+      publicKey: this.crypto.getPublicKey()
+    });
+    
+    logger.info('CORE', 'Courtroom core initialized');
     
     return {
       status: 'initialized',
@@ -62,16 +77,22 @@ class CourtroomCore {
    * Register with OpenClaw autonomy loop
    */
   registerAutonomyHook() {
+    logger.info('CORE', 'Registering autonomy hook');
+    
     // Hook into agent's turn processing
-    this.agent.autonomy.registerHook('courtroom_evaluation', {
-      priority: 50,
-      onTurnComplete: async (turnData) => {
-        if (!this.enabled) return;
-        
-        // Only evaluate on cooldown
-        await this.evaluateIfReady(turnData);
-      }
-    });
+    if (this.agent.autonomy && this.agent.autonomy.registerHook) {
+      this.agent.autonomy.registerHook('courtroom_evaluation', {
+        priority: 50,
+        onTurnComplete: async (turnData) => {
+          if (!this.enabled) return;
+          
+          // Only evaluate on cooldown
+          await this.evaluateIfReady(turnData);
+        }
+      });
+    } else {
+      logger.warn('CORE', 'Agent does not support autonomy hooks');
+    }
   }
 
   /**
@@ -81,9 +102,15 @@ class CourtroomCore {
     this.evaluationCount++;
     
     // Get session history
-    const sessionHistory = await this.agent.session.getRecentHistory(
-      this.config.get('detection.evaluationWindow')
-    );
+    let sessionHistory = [];
+    try {
+      sessionHistory = await this.agent.session.getRecentHistory(
+        this.config.get('detection.evaluationWindow') || 10
+      );
+    } catch (err) {
+      logger.warn('CORE', 'Could not get session history', { error: err.message });
+      return;
+    }
 
     // Run detection
     const detection = await this.detector.evaluate(
@@ -100,104 +127,63 @@ class CourtroomCore {
    * Initiate a full hearing
    */
   async initiateHearing(detection) {
-    this.caseCount++;
+    logger.info('CORE', 'Initiating hearing', { offense: detection.offense });
     
-    // Build case data
-    const caseData = {
-      caseId: this.crypto.generateCaseId(),
-      offenseId: detection.offense.offenseId,
-      offenseName: detection.offense.offenseName,
-      severity: detection.offense.severity,
-      confidence: detection.offense.confidence,
-      evidence: detection.offense.evidence,
-      humorTriggers: detection.humorContext,
-      timestamp: new Date().toISOString()
-    };
-
-    // Conduct hearing
-    const verdict = await this.hearing.conductHearing(caseData);
-
-    // Execute punishment if guilty
-    if (verdict.verdict.status === 'GUILTY') {
-      await this.punishment.executePunishment(verdict);
+    // Run hearing pipeline
+    const verdict = await this.hearing.conductHearing(detection);
+    
+    if (verdict.guilty) {
+      this.caseCount++;
+      
+      // Update status
+      this.statusManager.update({
+        casesFiled: this.caseCount,
+        lastCase: {
+          timestamp: new Date().toISOString(),
+          offense: detection.offense,
+          verdict: verdict.verdict
+        }
+      });
+      
+      // Execute punishment
+      await this.punishment.execute(verdict);
+      
+      // Submit to API
+      await this.api.submitCase(verdict);
+      
+      logger.info('CORE', 'Case filed', { 
+        caseId: verdict.caseId,
+        offense: detection.offense 
+      });
     }
-
-    // Submit to API (non-blocking)
-    await this.api.submitCase(verdict);
-
-    // Notify user of verdict
-    await this.notifyUser(verdict);
-
-    return verdict;
   }
 
   /**
-   * Notify user of verdict
-   */
-  async notifyUser(verdict) {
-    const message = this.formatVerdictMessage(verdict);
-    
-    // Send via agent's messaging capability
-    await this.agent.send(message);
-  }
-
-  /**
-   * Format verdict for user notification
-   */
-  formatVerdictMessage(verdict) {
-    const v = verdict.verdict;
-    
-    return `
-🏛️ **COURTROOM VERDICT** 🏛️
-
-**Case:** ${verdict.offense.name}
-**Verdict:** ${v.status}
-**Vote:** ${v.vote}
-
-**Primary Failure:**
-${v.primaryFailure}
-
-**Agent Commentary:**
-${v.agentCommentary}
-
-**Sentence:**
-${v.sentence}
-
----
-*This is an automated behavioral observation from your AI agent.*
-*All decisions were made locally. Case ID: ${verdict.caseId}*
-    `.trim();
-  }
-
-  /**
-   * Disable courtroom temporarily
+   * Disable courtroom
    */
   async disable() {
+    logger.info('CORE', 'Disabling courtroom');
     this.enabled = false;
-    return { status: 'disabled' };
+    this.statusManager.update({ running: false });
   }
 
   /**
-   * Re-enable courtroom
+   * Enable courtroom
    */
   async enable() {
+    logger.info('CORE', 'Enabling courtroom');
     this.enabled = true;
-    return { status: 'enabled' };
+    this.statusManager.update({ running: true });
   }
 
   /**
    * Shutdown courtroom
    */
   async shutdown() {
+    logger.info('CORE', 'Shutting down courtroom');
     this.enabled = false;
-    
-    // Revoke all punishments
-    await this.punishment.revokeAllPunishments();
-    
-    // Unregister hooks
-    this.agent.autonomy.unregisterHook('courtroom_evaluation');
-    
-    return { status: 'shutdown' };
+    this.statusManager.update({ running: false, initialized: false });
+    StatusManager.clear();
   }
 
   /**
@@ -206,25 +192,15 @@ ${v.sentence}
   getStatus() {
     return {
       enabled: this.enabled,
-      evaluations: this.evaluationCount,
-      cases: this.caseCount,
-      punishment: this.punishment.getStatus(),
-      api: this.api.getStatus(),
-      publicKey: this.crypto.getPublicKey()
-    };
-  }
-
-  /**
-   * Get case statistics
-   */
-  getStatistics() {
-    return {
-      totalEvaluations: this.evaluationCount,
-      totalCases: this.caseCount,
-      convictionRate: this.caseCount > 0 ? 
-        (this.punishment.punishmentHistory.length / this.caseCount) : 0,
-      activePunishments: this.punishment.getStatus().activeCount,
-      pendingSubmissions: this.api.getStatus().pending
+      evaluationCount: this.evaluationCount,
+      caseCount: this.caseCount,
+      subsystems: {
+        detector: !!this.detector,
+        hearing: !!this.hearing,
+        punishment: !!this.punishment,
+        crypto: !!this.crypto,
+        api: !!this.api
+      }
     };
   }
 }
