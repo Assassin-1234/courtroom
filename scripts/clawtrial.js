@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 
 /**
- * ClawTrial CLI - Main entry point
+ * ClawTrial CLI - Configuration and status tool
  * Usage: clawtrial <command> [options]
+ * 
+ * Note: The courtroom runs as a ClawDBot skill, not a separate process.
+ * This CLI is for configuration and status checking only.
  */
 
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
-const { spawn, exec } = require('child_process');
 
 const configPath = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_config.json');
 const keysPath = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_keys.json');
-const PID_FILE = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_monitor.pid');
 
 function loadConfig() {
   if (!fs.existsSync(configPath)) {
@@ -33,52 +34,6 @@ function log(message) {
   console.log(message);
 }
 
-// Check if monitor is running
-function isMonitorRunning() {
-  try {
-    if (fs.existsSync(PID_FILE)) {
-      const pid = parseInt(fs.readFileSync(PID_FILE, 'utf8'));
-      process.kill(pid, 0); // Check if process exists
-      return pid;
-    }
-  } catch (e) {
-    // Process not running
-    try { fs.unlinkSync(PID_FILE); } catch (e) {}
-  }
-  return null;
-}
-
-// Start background monitor
-function startMonitor() {
-  const monitorScript = path.join(__dirname, '..', 'src', 'monitor.js');
-  
-  const child = spawn('node', [monitorScript], {
-    detached: true,
-    stdio: 'ignore'
-  });
-  
-  child.unref();
-  
-  fs.writeFileSync(PID_FILE, child.pid.toString());
-  
-  return child.pid;
-}
-
-// Stop monitor
-function stopMonitor() {
-  const pid = isMonitorRunning();
-  if (pid) {
-    try {
-      process.kill(pid, 'SIGTERM');
-      fs.unlinkSync(PID_FILE);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-  return false;
-}
-
 // Setup command - interactive setup
 async function setup() {
   log('\n🏛️  ClawTrial Setup\n');
@@ -89,26 +44,9 @@ async function setup() {
     log('✓ Courtroom already configured');
     log(`  Installed: ${new Date(config.installedAt).toLocaleDateString()}`);
     log(`  Status: ${config.enabled !== false ? 'Active' : 'Disabled'}`);
-    
-    // Check if monitor is running
-    const monitorPid = isMonitorRunning();
-    if (monitorPid) {
-      log(`  Monitor: Running (PID: ${monitorPid})`);
-    } else {
-      log(`  Monitor: Not running`);
-      log('\nStarting monitor...');
-      const pid = startMonitor();
-      log(`✓ Monitor started (PID: ${pid})`);
-    }
-    
-    log('\nTo reconfigure, first run: clawtrial revoke\n');
+    log('\nThe courtroom will activate when ClawDBot loads the skill.\n');
     return;
   }
-
-  // Check if ClawDBot environment
-  const isClawDBot = process.env.CLAUDBOT_ENV === 'true' || 
-                     fs.existsSync('/home/angad/.clawdbot') ||
-                     fs.existsSync(path.join(process.env.HOME || '', '.clawdbot'));
 
   // Show consent notice
   log('╔════════════════════════════════════════════════════════════╗');
@@ -146,13 +84,6 @@ async function setup() {
 
   log('\n✓ Consent granted\n');
 
-  // Auto-detect agent runtime
-  let agentType = 'generic';
-  if (isClawDBot) {
-    agentType = 'clawdbot';
-    log('✓ ClawDBot environment detected');
-  }
-
   // Create config
   const config = {
     version: '1.0.0',
@@ -171,7 +102,7 @@ async function setup() {
       }
     },
     agent: {
-      type: agentType,
+      type: 'clawdbot',
       autoInitialize: true
     },
     detection: {
@@ -187,6 +118,40 @@ async function setup() {
 
   saveConfig(config);
   log('✓ Configuration saved');
+
+  // Register as ClawDBot skill
+  log('🔗 Registering with ClawDBot...');
+  try {
+    const skillsDir = path.join(process.env.HOME || '', '.clawdbot', 'skills');
+    const skillLinkPath = path.join(skillsDir, 'courtroom');
+    
+    // Create skills directory if needed
+    if (!fs.existsSync(skillsDir)) {
+      fs.mkdirSync(skillsDir, { recursive: true });
+    }
+    
+    // Remove old link if exists
+    if (fs.existsSync(skillLinkPath)) {
+      try { fs.unlinkSync(skillLinkPath); } catch (e) {}
+    }
+    
+    // Find the actual package path
+    let packagePath;
+    try {
+      packagePath = require.resolve('@clawdbot/courtroom/package.json').replace('/package.json', '');
+    } catch (e) {
+      // Fallback to finding it relative to this script
+      packagePath = path.join(__dirname, '..');
+    }
+    
+    // Create symlink
+    fs.symlinkSync(packagePath, skillLinkPath, 'dir');
+    
+    log('✓ Registered as ClawDBot skill');
+  } catch (err) {
+    log('⚠️  Could not auto-register: ' + err.message);
+    log('   You may need to restart ClawDBot manually.');
+  }
 
   // Generate keys
   if (!fs.existsSync(keysPath)) {
@@ -211,43 +176,17 @@ async function setup() {
     }
   }
 
-  // Create auto-init script for ClawDBot
-  if (isClawDBot) {
-    const clawdbotDir = path.join(process.env.HOME || '', '.clawdbot');
-    const initScript = `
-// Auto-generated by ClawTrial setup
-const { createCourtroom } = require('@clawdbot/courtroom');
-
-if (global.clawdbotAgent) {
-  const courtroom = createCourtroom(global.clawdbotAgent);
-  courtroom.initialize().then(() => {
-    console.log('🏛️  ClawTrial activated');
-  }).catch(err => {
-    console.error('ClawTrial init failed:', err.message);
-  });
-  global.clawdbotAgent.courtroom = courtroom;
-}
-`;
-    fs.writeFileSync(path.join(clawdbotDir, 'courtroom_auto_init.js'), initScript);
-    log('✓ Auto-initialization configured');
-  }
-
-  // Start background monitor
-  log('\n🚀 Starting background monitor...');
-  const monitorPid = startMonitor();
-  log(`✓ Monitor started (PID: ${monitorPid})`);
-  log('  The monitor will initialize the courtroom when your agent is ready');
-
   log('\n╔════════════════════════════════════════════════════════════╗');
   log('║              🎉 SETUP COMPLETE! 🎉                         ║');
   log('╠════════════════════════════════════════════════════════════╣');
   log('║                                                            ║');
-  log('║  ClawTrial is configured and monitoring!                   ║');
+  log('║  ClawTrial is configured and ready!                        ║');
+  log('║                                                            ║');
+  log('║  The courtroom will automatically activate when            ║');
+  log('║  ClawDBot loads the skill.                                 ║');
   log('║                                                            ║');
   log('║  Commands:                                                 ║');
   log('║    clawtrial status    - Check status                      ║');
-  log('║    clawtrial start     - Start monitor                     ║');
-  log('║    clawtrial stop      - Stop monitor                      ║');
   log('║    clawtrial disable   - Temporarily disable               ║');
   log('║    clawtrial enable    - Re-enable                         ║');
   log('║    clawtrial revoke    - Revoke consent & uninstall        ║');
@@ -256,38 +195,6 @@ if (global.clawdbotAgent) {
   log('║                                                            ║');
   log('║  View cases: https://clawtrial.app                         ║');
   log('╚════════════════════════════════════════════════════════════╝\n');
-}
-
-// Start command
-function start() {
-  const config = loadConfig();
-  
-  if (!config) {
-    log('\n❌ ClawTrial not configured');
-    log('   Run: clawtrial setup\n');
-    return;
-  }
-
-  const existingPid = isMonitorRunning();
-  if (existingPid) {
-    log(`\n✓ Monitor already running (PID: ${existingPid})\n`);
-    return;
-  }
-
-  log('\n🚀 Starting ClawTrial monitor...');
-  const pid = startMonitor();
-  log(`✓ Monitor started (PID: ${pid})`);
-  log('  The courtroom will initialize when your agent is ready\n');
-}
-
-// Stop command
-function stop() {
-  const stopped = stopMonitor();
-  if (stopped) {
-    log('\n⏸️  ClawTrial monitor stopped\n');
-  } else {
-    log('\nℹ️  Monitor was not running\n');
-  }
 }
 
 // Status command
@@ -300,9 +207,6 @@ function status() {
     return;
   }
 
-  // Check if monitor is running
-  const monitorPid = isMonitorRunning();
-
   // Check if courtroom is running via status file
   const { getCourtroomStatus } = require('../src/daemon');
   const runtimeStatus = getCourtroomStatus();
@@ -311,14 +215,6 @@ function status() {
   log(`Config: ${config.enabled !== false ? '✅ Active' : '⏸️  Disabled'}`);
   log(`Consent: ${config.consent?.granted ? '✅ Granted' : '❌ Not granted'}`);
   log(`Installed: ${new Date(config.installedAt).toLocaleDateString()}`);
-  log(`Agent Type: ${config.agent?.type || 'generic'}`);
-  
-  if (monitorPid) {
-    log(`\n📡 Monitor: ✅ Running (PID: ${monitorPid})`);
-  } else {
-    log(`\n📡 Monitor: ⏸️  Not running`);
-    log('  Run: clawtrial start');
-  }
   
   if (runtimeStatus.running) {
     log(`\n🏛️  Courtroom: ✅ Running`);
@@ -329,9 +225,8 @@ function status() {
     }
   } else {
     log(`\n🏛️  Courtroom: ⏸️  Not running`);
-    if (monitorPid) {
-      log('  Waiting for agent to become available...');
-    }
+    log('  The courtroom runs as a ClawDBot skill.');
+    log('  It will activate when ClawDBot loads the package.');
   }
   
   if (fs.existsSync(keysPath)) {
@@ -376,7 +271,7 @@ function enable() {
   config.enabled = true;
   saveConfig(config);
   log('\n✅ ClawTrial enabled\n');
-  log('The agent will start monitoring when it loads the courtroom.\n');
+  log('The courtroom will activate when ClawDBot loads the skill.\n');
 }
 
 // Revoke command
@@ -402,18 +297,12 @@ async function revoke() {
   rl.close();
 
   if (answer === 'REVOKE') {
-    // Stop monitor first
-    stopMonitor();
-    
     // Delete all files
     if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
     if (fs.existsSync(keysPath)) fs.unlinkSync(keysPath);
     
     const debugPath = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_debug.log');
     if (fs.existsSync(debugPath)) fs.unlinkSync(debugPath);
-    
-    const initPath = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_auto_init.js');
-    if (fs.existsSync(initPath)) fs.unlinkSync(initPath);
     
     const statusPath = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_status.json');
     if (fs.existsSync(statusPath)) fs.unlinkSync(statusPath);
@@ -490,7 +379,7 @@ function diagnose() {
   log(`Node.js version: ${nodeVersion} ${majorVersion >= 18 ? '✅' : '❌ (needs >= 18)'}`);
   
   // Check environment
-  const { checkEnvironment, detectAgentRuntime } = require('../src/environment');
+  const { checkEnvironment } = require('../src/environment');
   const env = checkEnvironment();
   log(`\nEnvironment: ${env.valid ? '✅ Valid' : '❌ Issues found'}`);
   if (!env.valid) {
@@ -518,14 +407,6 @@ function diagnose() {
     log(`\nKeys: ❌ Not found`);
   }
   
-  // Check monitor
-  const monitorPid = isMonitorRunning();
-  if (monitorPid) {
-    log(`\n📡 Monitor: ✅ Running (PID: ${monitorPid})`);
-  } else {
-    log(`\n📡 Monitor: ⏸️  Not running`);
-  }
-  
   // Check if courtroom is running
   const { getCourtroomStatus } = require('../src/daemon');
   const runtimeStatus = getCourtroomStatus();
@@ -537,17 +418,8 @@ function diagnose() {
     log(`  Cases Filed: ${runtimeStatus.casesFiled || 0}`);
   } else {
     log(`\n🏛️  Courtroom: ⏸️  Not running`);
-    
-    // Check if agent is available in this process
-    const agentInfo = detectAgentRuntime();
-    if (agentInfo) {
-      log('  Agent detected in current process');
-      log('  Run: clawtrial setup to initialize');
-    } else if (monitorPid) {
-      log('  Monitor is running - waiting for agent...');
-    } else {
-      log('  Run: clawtrial start to begin monitoring');
-    }
+    log('  The courtroom runs as a ClawDBot skill.');
+    log('  It will activate when ClawDBot loads the package.');
   }
   
   // Check debug logs
@@ -563,10 +435,8 @@ function diagnose() {
   
   if (!config) {
     log('Next step: Run "clawtrial setup"');
-  } else if (!monitorPid && !runtimeStatus.running) {
-    log('Next step: Run "clawtrial start"');
   } else if (!runtimeStatus.running) {
-    log('Status: Monitor running, waiting for agent...');
+    log('Status: Configured. Courtroom will activate with ClawDBot.');
   } else {
     log('Status: Fully operational! 🎉');
   }
@@ -579,8 +449,6 @@ function help() {
   log('Usage: clawtrial <command> [options]\n');
   log('Commands:');
   log('  setup              - Interactive setup and consent');
-  log('  start              - Start background monitor');
-  log('  stop               - Stop background monitor');
   log('  status             - Check courtroom status');
   log('  disable            - Temporarily disable monitoring');
   log('  enable             - Re-enable monitoring');
@@ -591,7 +459,6 @@ function help() {
   log('');
   log('Examples:');
   log('  clawtrial setup');
-  log('  clawtrial start');
   log('  clawtrial status');
   log('  clawtrial diagnose');
   log('');
@@ -605,12 +472,6 @@ async function main() {
   switch (command) {
     case 'setup':
       await setup();
-      break;
-    case 'start':
-      start();
-      break;
-    case 'stop':
-      stop();
       break;
     case 'status':
       status();

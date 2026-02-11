@@ -11,6 +11,7 @@ const { ConfigManager } = require('./config');
 const { version } = require('../package.json');
 const { detectAgentRuntime, createMockAgent, checkEnvironment, getSetupInstructions } = require('./environment');
 const { logger } = require('./debug');
+const { skill } = require('./skill');
 const fs = require('fs');
 const path = require('path');
 
@@ -233,12 +234,19 @@ const environment = {
   getSetupInstructions
 };
 
-// Trigger auto-start if in ClawDBot environment
-require('./autostart');
-
+// Export skill for ClawDBot auto-loading
 module.exports = {
   Courtroom,
   createCourtroom,
   quickStart: Courtroom.quickStart,
-  environment
+  environment,
+  skill  // ClawDBot will use this
 };
+
+// Auto-initialize skill if loaded by ClawDBot
+if (typeof global !== 'undefined' && global.clawdbotAgent) {
+  logger.info('INDEX', 'Detected ClawDBot environment, auto-initializing skill');
+  skill.initialize(global.clawdbotAgent).catch(err => {
+    logger.error('INDEX', 'Auto-initialization failed', { error: err.message });
+  });
+}

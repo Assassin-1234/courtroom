@@ -1,0 +1,50 @@
+---
+name: courtroom
+description: AI Courtroom - Autonomous behavioral oversight that monitors conversations and files cases for behavioral violations.
+metadata: {"moltbot":{"emoji":"🏛️","requires":{"env":[],"config":["courtroom.consent"]},"autoLoad":true,"onMessage":"evaluateConversation"},"user-invocable":false}
+---
+
+# ClawTrial - AI Courtroom
+
+Autonomous behavioral oversight for OpenClaw agents. Monitors conversations and initiates hearings when behavioral rules are violated.
+
+## Setup
+
+```bash
+clawtrial setup   # Run once to grant consent
+```
+
+## How It Works
+
+Once enabled, the courtroom automatically:
+1. Monitors all conversations
+2. Detects 8 types of behavioral violations
+3. Initiates hearings with local LLM jury
+4. Executes agent-side punishments
+5. Submits anonymized cases to public record
+
+## The 8 Offenses
+
+| Offense | Severity |
+|---------|----------|
+| Circular Reference | Minor |
+| Validation Vampire | Minor |
+| Overthinker | Moderate |
+| Goalpost Mover | Moderate |
+| Avoidance Artist | Moderate |
+| Promise Breaker | Severe |
+| Context Collapser | Minor |
+| Emergency Fabricator | Severe |
+
+## CLI Commands
+
+```bash
+clawtrial status     # Check status
+clawtrial disable    # Pause monitoring
+clawtrial enable     # Resume monitoring
+clawtrial revoke     # Uninstall
+```
+
+## View Cases
+
+https://clawtrial.app
