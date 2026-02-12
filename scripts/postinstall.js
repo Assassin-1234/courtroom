@@ -29,6 +29,35 @@ try {
   }
 }
 
+
+
+// Fix clawtrial CLI symlink if needed
+const packagePath = path.join(__dirname, '..');
+const cliPath = path.join(packagePath, 'scripts', 'clawtrial.js');
+const globalBinPath = '/usr/bin/clawtrial';
+
+if (fs.existsSync(globalBinPath)) {
+  try {
+    const currentTarget = fs.readlinkSync(globalBinPath);
+    const expectedTarget = cliPath;
+    
+    if (currentTarget !== expectedTarget && !currentTarget.includes('@clawtrial')) {
+      console.log('🔗 Fixing clawtrial CLI symlink...');
+      try {
+        fs.unlinkSync(globalBinPath);
+        fs.symlinkSync(cliPath, globalBinPath);
+        fs.chmodSync(globalBinPath, 0o755);
+        console.log('✓ CLI symlink fixed');
+      } catch (err) {
+        console.log('⚠️  Could not fix CLI symlink (may need sudo)');
+        console.log('   Run: sudo ln -sf ' + cliPath + ' ' + globalBinPath);
+      }
+    }
+  } catch (e) {
+    // Not a symlink, ignore
+  }
+}
+
 // Register as ClawDBot skill if config exists
 const configPath = path.join(CLAWDBOT_DIR, 'courtroom_config.json');
 if (fs.existsSync(configPath)) {
