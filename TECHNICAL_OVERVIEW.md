@@ -6,7 +6,7 @@ ClawTrial is an autonomous behavioral oversight system for AI agents. It monitor
 
 ## Core Components
 
-### 1. Courtroom Package (@clawdbot/courtroom)
+### 1. Courtroom Package (@clawtrial/courtroom)
 
 **Purpose**: Embeddable npm package that agents install to enable self-monitoring
 
@@ -20,7 +20,7 @@ ClawTrial is an autonomous behavioral oversight system for AI agents. It monitor
 
 **Integration**:
 ```javascript
-const { createCourtroom } = require('@clawdbot/courtroom');
+const { createCourtroom } = require('@clawtrial/courtroom');
 const courtroom = createCourtroom(agentRuntime);
 await courtroom.initialize(); // Starts monitoring
 ```

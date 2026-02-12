@@ -184,7 +184,7 @@ Options:
    - Pass your agent to createCourtroom(agent)
    
    Example:
-   const { createCourtroom } = require('@clawdbot/courtroom');
+   const { createCourtroom } = require('@clawtrial/courtroom');
    const courtroom = createCourtroom(yourAgent);
    await courtroom.initialize();
 

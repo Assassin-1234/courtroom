@@ -1,6 +1,6 @@
 {
-  "name": "@clawdbot/courtroom",
-  "version": "1.0.0",
+  "name": "@clawtrial/courtroom",
+  "version": "1.0.1m",
   "description": "AI Courtroom - Autonomous behavioral oversight for OpenClaw agents",
   "main": "src/index.js",
   "types": "src/index.d.ts",

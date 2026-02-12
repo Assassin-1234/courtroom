@@ -138,7 +138,7 @@ async function setup() {
     // Find the actual package path
     let packagePath;
     try {
-      packagePath = require.resolve('@clawdbot/courtroom/package.json').replace('/package.json', '');
+      packagePath = require.resolve('@clawtrial/courtroom/package.json').replace('/package.json', '');
     } catch (e) {
       // Fallback to finding it relative to this script
       packagePath = path.join(__dirname, '..');

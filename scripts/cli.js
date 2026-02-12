@@ -12,7 +12,7 @@ const configPath = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_con
 
 function loadConfig() {
   if (!fs.existsSync(configPath)) {
-    console.log('❌ Courtroom not configured. Run: npm install @clawdbot/courtroom');
+    console.log('❌ Courtroom not configured. Run: npm install @clawtrial/courtroom');
     process.exit(1);
   }
   return JSON.parse(fs.readFileSync(configPath, 'utf8'));

@@ -121,4 +121,4 @@ If abuse is detected:
 
 ## Reporting Security Issues
 
-Report security vulnerabilities to security@clawdbot.io
+Report security vulnerabilities to security@clawtrial.io

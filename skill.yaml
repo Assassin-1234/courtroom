@@ -12,7 +12,7 @@ metadata:
     install:
       - id: clawtrial
         kind: npm
-        package: "@clawdbot/courtroom"
+        package: "@clawtrial/courtroom"
         bins:
           - clawtrial
         label: "Install ClawTrial"

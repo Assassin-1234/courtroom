@@ -1,4 +1,4 @@
-# @clawdbot/courtroom
+# @clawtrial/courtroom
 
 AI Courtroom - Autonomous behavioral oversight for OpenClaw agents.
 
