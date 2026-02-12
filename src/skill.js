@@ -118,6 +118,18 @@ class CourtroomSkill {
           publicKey: result.publicKey
         });
         
+        
+        // Register message handler with ClawDBot runtime if available
+        if (this.agent && this.agent.onMessage) {
+          this.agent.onMessage((message, context) => this.onMessage(message, context));
+          logger.info('SKILL', 'Registered message handler with runtime');
+        } else if (this.agent && this.agent.registerMessageHandler) {
+          this.agent.registerMessageHandler((message, context) => this.onMessage(message, context));
+          logger.info('SKILL', 'Registered message handler with runtime');
+        } else {
+          logger.warn('SKILL', 'No message handler registration method found - relying on ClawDBot skill system');
+        }
+
         logger.info('SKILL', 'Courtroom skill initialized successfully');
         console.log('\n🏛️  ClawTrial is monitoring conversations\n');
       } else {

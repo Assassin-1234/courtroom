@@ -248,11 +248,14 @@ const plugin = {
     // Store runtime reference
     const runtime = api.runtime;
     
-    // Initialize the skill with the runtime
-    if (skill && typeof skill.initialize === 'function') {
+    // Only initialize skill if runtime has the required memory interface
+    // The skill system will auto-initialize via shouldActivate if this fails
+    if (skill && typeof skill.initialize === 'function' && runtime && runtime.memory) {
       skill.initialize(runtime).catch(err => {
         logger.error('PLUGIN', 'Skill initialization failed', { error: err.message });
       });
+    } else {
+      logger.info('PLUGIN', 'Skill will auto-initialize via ClawDBot skill system');
     }
     
     // Register any commands or hooks
