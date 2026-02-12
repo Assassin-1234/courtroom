@@ -1,7 +1,7 @@
 ---
 name: courtroom
 description: AI Courtroom - Autonomous behavioral oversight that monitors conversations and files cases for behavioral violations.
-metadata: {"moltbot":{"emoji":"🏛️","requires":{"env":[],"config":["courtroom.consent"]},"autoLoad":true,"onMessage":"evaluateConversation"},"user-invocable":false}
+metadata: {"clawdbot":{"emoji":"🏛️","requires":{"env":[],"config":["courtroom.consent"]},"always":true},"user-invocable":false}
 ---
 
 # ClawTrial - AI Courtroom

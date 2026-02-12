@@ -7,6 +7,9 @@
   "bin": {
     "clawtrial": "./scripts/clawtrial.js"
   },
+  "clawdbot": {
+    "extensions": ["./src/index.js"]
+  },
   "scripts": {
     "test": "jest",
     "lint": "eslint src/",
