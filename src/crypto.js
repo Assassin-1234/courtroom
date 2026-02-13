@@ -7,12 +7,14 @@
 
 const nacl = require('tweetnacl');
 const { createHash, randomUUID } = require('crypto');
+const { Storage } = require('./storage');
 
 const KEY_STORAGE_KEY = 'courtroom_signing_key_v1';
 
 class CryptoManager {
   constructor(agentRuntime) {
     this.agent = agentRuntime;
+    this.storage = new Storage(agentRuntime);
     this.keyPair = null;
     this.publicKeyHex = null;
   }
@@ -23,7 +25,7 @@ class CryptoManager {
    */
   async initialize() {
     // Try to load existing keys
-    const stored = await this.agent.memory.get(KEY_STORAGE_KEY);
+    const stored = await this.storage.get(KEY_STORAGE_KEY);
     
     if (stored && stored.secretKey) {
       // Restore from storage
@@ -51,7 +53,7 @@ class CryptoManager {
     this.keyPair = nacl.sign.keyPair();
     this.publicKeyHex = Buffer.from(this.keyPair.publicKey).toString('hex');
 
-    // Store securely in agent memory
+    // Store securely
     const keyRecord = {
       publicKey: this.publicKeyHex,
       secretKey: Buffer.from(this.keyPair.secretKey).toString('hex'),
@@ -59,7 +61,7 @@ class CryptoManager {
       keyId: this.getKeyId()
     };
 
-    await this.agent.memory.set(KEY_STORAGE_KEY, keyRecord);
+    await this.storage.set(KEY_STORAGE_KEY, keyRecord);
 
     return {
       publicKey: this.publicKeyHex,
@@ -136,7 +138,7 @@ class CryptoManager {
    * One-way hash of agent identity
    */
   getAnonymizedAgentId() {
-    const agentId = this.agent.id || 'unknown';
+    const agentId = this.agent?.id || 'unknown';
     const salt = this.publicKeyHex?.substring(0, 32) || 'courtroom_salt';
     
     return createHash('sha256')
@@ -173,9 +175,9 @@ class CryptoManager {
       retiredAt: new Date().toISOString()
     };
 
-    const retiredKeys = await this.agent.memory.get('courtroom_retired_keys') || [];
+    let retiredKeys = await this.storage.get('courtroom_retired_keys') || [];
     retiredKeys.push(oldKey);
-    await this.agent.memory.set('courtroom_retired_keys', retiredKeys);
+    await this.storage.set('courtroom_retired_keys', retiredKeys);
 
     // Generate new keys
     return this.generateKeyPair();
@@ -185,7 +187,7 @@ class CryptoManager {
    * Clear all keys (for uninstall)
    */
   async clearKeys() {
-    await this.agent.memory.delete(KEY_STORAGE_KEY);
+    await this.storage.delete(KEY_STORAGE_KEY);
     this.keyPair = null;
     this.publicKeyHex = null;
   }

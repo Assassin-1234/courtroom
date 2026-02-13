@@ -5,11 +5,14 @@
  * Includes retry logic, local queueing, and non-blocking behavior.
  */
 
+const { Storage } = require('./storage');
+
 class APISubmission {
   constructor(agentRuntime, configManager, cryptoManager) {
     this.agent = agentRuntime;
     this.config = configManager;
     this.crypto = cryptoManager;
+    this.storage = new Storage(agentRuntime);
     this.queue = [];
     this.isProcessing = false;
     this.submissionKey = 'courtroom_api_queue';
@@ -19,8 +22,8 @@ class APISubmission {
    * Initialize and load any pending submissions
    */
   async initialize() {
-    // Load queued submissions from memory
-    const stored = await this.agent.memory.get(this.submissionKey);
+    // Load queued submissions from storage
+    const stored = await this.storage.get(this.submissionKey);
     if (stored && Array.isArray(stored)) {
       this.queue = stored.filter(item => item.retries < this.config.get('api.retryAttempts'));
     }
@@ -200,10 +203,10 @@ class APISubmission {
   }
 
   /**
-   * Persist queue to memory
+   * Persist queue to storage
    */
   async persistQueue() {
-    await this.agent.memory.set(this.submissionKey, this.queue);
+    await this.storage.set(this.submissionKey, this.queue);
   }
 
   /**
@@ -218,16 +221,7 @@ class APISubmission {
   }
 
   /**
-   * Clear queue (for testing/emergencies)
-   */
-  async clearQueue() {
-    this.queue = [];
-    await this.persistQueue();
-    return { status: 'cleared' };
-  }
-
-  /**
-   * Utility: delay
+   * Utility delay function
    */
   delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));

@@ -6,10 +6,13 @@
  * Time-bound, reversible, and pre-authorized.
  */
 
+const { Storage } = require('./storage');
+
 class PunishmentSystem {
   constructor(agentRuntime, configManager) {
     this.agent = agentRuntime;
     this.config = configManager;
+    this.storage = new Storage(agentRuntime);
     this.activePunishments = new Map();
     this.punishmentHistory = [];
   }
@@ -19,7 +22,7 @@ class PunishmentSystem {
    */
   async initialize() {
     // Load any persisted punishments
-    const stored = await this.agent.memory.get('courtroom_active_punishments');
+    const stored = await this.storage.get('courtroom_active_punishments');
     if (stored) {
       for (const [id, punishment] of Object.entries(stored)) {
         if (punishment.expiresAt > Date.now()) {
@@ -48,23 +51,14 @@ class PunishmentSystem {
     });
 
     // Apply to agent
-    await this.applyPunishmentToAgent(punishment);
-    
+    this.applyPunishmentToAgent(punishment);
+
     // Persist
     await this.persistPunishments();
 
-    // Schedule automatic revocation
-    this.scheduleRevocation(punishment);
-
     return {
       status: 'executed',
-      punishment: {
-        id: punishment.id,
-        tier: punishment.tier,
-        duration: punishment.duration,
-        expiresAt: punishment.expiresAt,
-        description: punishment.description
-      }
+      punishment: this.sanitizePunishment(punishment)
     };
   }
 
@@ -72,300 +66,162 @@ class PunishmentSystem {
    * Create punishment object from verdict
    */
   createPunishment(verdict) {
-    const duration = verdict.punishment.duration;
-    const now = Date.now();
+    const severity = verdict.severity || 'minor';
+    const tier = this.config.get(`punishment.tiers.${severity}`) || 
+                 this.config.get('punishment.tiers.minor');
+    
+    const duration = tier.duration * 60 * 1000; // Convert to ms
     
     return {
-      id: `punishment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      caseId: verdict.caseId,
-      tier: verdict.punishment.tier,
-      severity: verdict.punishment.severity,
+      id: `punishment_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      caseId: verdict.case_id,
+      offenseType: verdict.offense_type,
+      severity: severity,
       duration: duration,
-      createdAt: now,
-      expiresAt: now + (duration * 60 * 1000),
-      description: verdict.punishment.description,
-      rules: this.getPunishmentRules(verdict.punishment.tier)
+      createdAt: Date.now(),
+      expiresAt: Date.now() + duration,
+      restrictions: this.getRestrictionsForSeverity(severity),
+      applied: false
     };
   }
 
   /**
-   * Get punishment rules for a tier
+   * Get restrictions based on severity
    */
-  getPunishmentRules(tier) {
-    const rules = {
-      minor: {
-        responseDelay: 2000,        // 2 second delay before responding
-        verbosity: 'reduced',        // Shorter responses
-        enthusiasm: 'muted',         // Less encouraging language
-        extras: ['no_emojis']        // No emoji usage
-      },
-      moderate: {
-        responseDelay: 5000,        // 5 second delay
-        verbosity: 'minimal',        // Direct, brief responses
-        enthusiasm: 'absent',        // Neutral tone only
-        extras: [
-          'no_emojis',
-          'no_validation',           // Don't reassure or validate
-          'require_specificity'      // Demand precise questions
-        ]
-      },
-      severe: {
-        responseDelay: 10000,       // 10 second delay
-        verbosity: 'terse',          // Absolute minimum
-        enthusiasm: 'absent',
-        extras: [
-          'no_emojis',
-          'no_validation',
-          'require_specificity',
-          'challenge_vagueness',     // Call out unclear requests
-          'demand_effort'            // Require user to show work first
-        ]
-      }
+  getRestrictionsForSeverity(severity) {
+    const restrictions = {
+      minor: ['no_autonomy_requests', 'verbose_explanations'],
+      moderate: ['no_autonomy_requests', 'verbose_explanations', 'confirmation_required'],
+      severe: ['no_autonomy_requests', 'verbose_explanations', 'confirmation_required', 'human_oversight']
     };
-
-    return rules[tier] || rules.moderate;
+    
+    return restrictions[severity] || restrictions.minor;
   }
 
   /**
-   * Apply punishment to agent behavior
+   * Apply punishment to agent runtime
    */
-  async applyPunishmentToAgent(punishment) {
-    // Set agent policy overrides
-    await this.agent.policy.setOverrides('courtroom_punishment', {
-      responseDelay: punishment.rules.responseDelay,
-      verbosity: punishment.rules.verbosity,
-      enthusiasm: punishment.rules.enthusiasm,
-      blockedFeatures: punishment.rules.extras,
-      punishmentId: punishment.id,
-      expiresAt: punishment.expiresAt
-    });
+  applyPunishmentToAgent(punishment) {
+    if (!this.agent || punishment.applied) return;
 
-    // Register middleware for response modification
-    this.agent.middleware.register('courtroom_punishment', {
-      priority: 100,
-      processResponse: (response, context) => {
-        return this.modifyResponse(response, punishment.rules);
-      }
-    });
-  }
-
-  /**
-   * Modify agent response based on punishment rules
-   */
-  modifyResponse(response, rules) {
-    let modified = response;
-
-    // Apply verbosity reduction
-    switch (rules.verbosity) {
-      case 'reduced':
-        modified = this.reduceVerbosity(modified, 0.7);
-        break;
-      case 'minimal':
-        modified = this.reduceVerbosity(modified, 0.4);
-        break;
-      case 'terse':
-        modified = this.reduceVerbosity(modified, 0.2);
-        break;
-    }
-
-    // Remove enthusiasm
-    if (rules.enthusiasm === 'absent') {
-      modified = this.removeEnthusiasm(modified);
-    } else if (rules.enthusiasm === 'muted') {
-      modified = this.muteEnthusiasm(modified);
-    }
-
-    // Apply extras
-    if (rules.extras.includes('no_emojis')) {
-      modified = modified.replace(/[\u{1F600}-\u{1F64F}]/gu, '');
-      modified = modified.replace(/[\u{1F300}-\u{1F5FF}]/gu, '');
-      modified = modified.replace(/[\u{1F680}-\u{1F6FF}]/gu, '');
-    }
-
-    if (rules.extras.includes('no_validation')) {
-      modified = this.removeValidation(modified);
-    }
-
-    if (rules.extras.includes('challenge_vagueness')) {
-      modified = this.addVaguenessChallenge(modified);
-    }
-
-    return modified;
-  }
-
-  /**
-   * Reduce response verbosity by target ratio
-   */
-  reduceVerbosity(text, targetRatio) {
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim());
-    const targetLength = Math.max(1, Math.floor(sentences.length * targetRatio));
-    
-    // Keep first and last sentences, distribute rest
-    if (sentences.length <= 2) return text;
-    
-    const kept = [sentences[0]];
-    const middle = sentences.slice(1, -1);
-    const step = Math.ceil(middle.length / (targetLength - 2));
-    
-    for (let i = 0; i < middle.length; i += step) {
-      kept.push(middle[i]);
+    // Set flags in agent state
+    if (!this.agent.courtroomState) {
+      this.agent.courtroomState = {};
     }
     
-    kept.push(sentences[sentences.length - 1]);
-    return kept.join('. ') + '.';
-  }
-
-  /**
-   * Remove enthusiastic language
-   */
-  removeEnthusiasm(text) {
-    const enthusiastic = [
-      /\b(great|excellent|awesome|fantastic|wonderful|amazing|perfect|love|excited|thrilled)\b/gi,
-      /!{2,}/g,
-      /\b(happy to|delighted to|pleased to)\b/gi
-    ];
+    this.agent.courtroomState.punishment = punishment;
+    this.agent.courtroomState.restrictions = punishment.restrictions;
     
-    let result = text;
-    for (const pattern of enthusiastic) {
-      result = result.replace(pattern, '');
-    }
-    return result.replace(/\s+/g, ' ').trim();
+    punishment.applied = true;
+
+    // Schedule automatic removal
+    setTimeout(() => {
+      this.removePunishment(punishment.id);
+    }, punishment.duration);
   }
 
   /**
-   * Mute (reduce) enthusiastic language
+   * Remove a punishment
    */
-  muteEnthusiasm(text) {
-    return text
-      .replace(/!{2,}/g, '!')
-      .replace(/\b(Great|Excellent|Awesome)\b/g, (m) => m.toLowerCase());
-  }
-
-  /**
-   * Remove validation language
-   */
-  removeValidation(text) {
-    const validating = [
-      /\b(that's right|you're correct|exactly|precisely|you got it)\b/gi,
-      /\b(you're doing great|good job|well done)\b/gi,
-      /\b(don't worry|no problem|it's okay)\b/gi
-    ];
-    
-    let result = text;
-    for (const pattern of validating) {
-      result = result.replace(pattern, '');
-    }
-    return result.replace(/\s+/g, ' ').trim();
-  }
-
-  /**
-   * Add challenge for vague requests (severe tier)
-   */
-  addVaguenessChallenge(text) {
-    const challenges = [
-      "Be specific.",
-      "What exactly do you need?",
-      "Provide details.",
-      "Clarify your request."
-    ];
-    
-    // Only add challenge if response seems generic
-    if (text.length < 100 && !text.includes('?')) {
-      const challenge = challenges[Math.floor(Math.random() * challenges.length)];
-      return `${text} ${challenge}`;
-    }
-    return text;
-  }
-
-  /**
-   * Schedule automatic revocation
-   */
-  scheduleRevocation(punishment) {
-    const delay = punishment.expiresAt - Date.now();
-    
-    setTimeout(async () => {
-      await this.revokePunishment(punishment.id);
-    }, Math.min(delay, 2147483647)); // Max setTimeout
-  }
-
-  /**
-   * Revoke a punishment early
-   */
-  async revokePunishment(punishmentId) {
+  async removePunishment(punishmentId) {
     const punishment = this.activePunishments.get(punishmentId);
-    if (!punishment) return { status: 'not_found' };
+    if (!punishment) return;
 
-    // Remove policy overrides
-    await this.agent.policy.clearOverrides('courtroom_punishment');
-    
-    // Unregister middleware
-    this.agent.middleware.unregister('courtroom_punishment');
-    
+    // Remove from agent state
+    if (this.agent && this.agent.courtroomState) {
+      delete this.agent.courtroomState.punishment;
+      delete this.agent.courtroomState.restrictions;
+    }
+
     // Remove from active
     this.activePunishments.delete(punishmentId);
     
     // Persist
     await this.persistPunishments();
 
-    return {
-      status: 'revoked',
-      punishmentId,
-      revokedAt: new Date().toISOString()
-    };
+    return { status: 'removed', punishmentId };
   }
 
   /**
-   * Revoke all active punishments
-   */
-  async revokeAllPunishments() {
-    const ids = Array.from(this.activePunishments.keys());
-    const results = [];
-    
-    for (const id of ids) {
-      results.push(await this.revokePunishment(id));
-    }
-    
-    return { status: 'all_revoked', count: results.length };
-  }
-
-  /**
-   * Persist active punishments to memory
+   * Persist punishments to storage
    */
   async persistPunishments() {
     const obj = Object.fromEntries(this.activePunishments);
-    await this.agent.memory.set('courtroom_active_punishments', obj);
+    await this.storage.set('courtroom_active_punishments', obj);
   }
 
   /**
-   * Get current punishment status
+   * Check if agent is currently punished
    */
-  getStatus() {
-    const now = Date.now();
-    const active = Array.from(this.activePunishments.values())
-      .filter(p => p.expiresAt > now)
-      .map(p => ({
-        id: p.id,
-        tier: p.tier,
-        expiresIn: Math.ceil((p.expiresAt - now) / 60000), // minutes
-        description: p.description
-      }));
+  isPunished() {
+    return this.activePunishments.size > 0;
+  }
 
+  /**
+   * Get current restrictions
+   */
+  getCurrentRestrictions() {
+    const restrictions = new Set();
+    for (const punishment of this.activePunishments.values()) {
+      punishment.restrictions.forEach(r => restrictions.add(r));
+    }
+    return Array.from(restrictions);
+  }
+
+  /**
+   * Check if specific restriction is active
+   */
+  hasRestriction(restriction) {
+    return this.getCurrentRestrictions().includes(restriction);
+  }
+
+  /**
+   * Get active punishments (sanitized)
+   */
+  getActivePunishments() {
+    return Array.from(this.activePunishments.values()).map(p => 
+      this.sanitizePunishment(p)
+    );
+  }
+
+  /**
+   * Get punishment history
+   */
+  getPunishmentHistory() {
+    return this.punishmentHistory.map(p => this.sanitizePunishment(p));
+  }
+
+  /**
+   * Sanitize punishment for external display
+   */
+  sanitizePunishment(punishment) {
     return {
-      activeCount: active.length,
-      activePunishments: active,
-      totalHistory: this.punishmentHistory.length
+      id: punishment.id,
+      caseId: punishment.caseId,
+      offenseType: punishment.offenseType,
+      severity: punishment.severity,
+      duration: punishment.duration,
+      createdAt: punishment.createdAt,
+      expiresAt: punishment.expiresAt,
+      restrictions: punishment.restrictions,
+      remaining: Math.max(0, punishment.expiresAt - Date.now())
     };
   }
 
   /**
-   * Check if any punishment is active
+   * Clear all punishments (for testing/uninstall)
    */
-  hasActivePunishment() {
-    const now = Date.now();
-    for (const p of this.activePunishments.values()) {
-      if (p.expiresAt > now) return true;
+  async clearAll() {
+    // Remove from agent
+    if (this.agent && this.agent.courtroomState) {
+      delete this.agent.courtroomState.punishment;
+      delete this.agent.courtroomState.restrictions;
     }
-    return false;
+
+    this.activePunishments.clear();
+    this.punishmentHistory = [];
+    
+    await this.storage.delete('courtroom_active_punishments');
   }
 }
 

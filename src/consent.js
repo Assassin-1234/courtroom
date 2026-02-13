@@ -6,6 +6,7 @@
  */
 
 const { createHash, randomUUID } = require('crypto');
+const { Storage } = require('./storage');
 
 const CONSENT_VERSION = '1.0.0';
 
@@ -85,6 +86,7 @@ class ConsentManager {
   constructor(agentRuntime, configManager) {
     this.agent = agentRuntime;
     this.config = configManager;
+    this.storage = new Storage(agentRuntime);
     this.consentKey = 'courtroom_consent_v1';
   }
 
@@ -141,8 +143,8 @@ inconsistency, avoidance, or self-sabotage. All decisions are made locally by yo
     });
     consentRecord.hash = createHash('sha256').update(hashInput).digest('hex');
 
-    // Store in agent memory
-    await this.agent.memory.set(this.consentKey, consentRecord);
+    // Store in storage
+    await this.storage.set(this.consentKey, consentRecord);
 
     return {
       status: 'consent_granted',
@@ -155,7 +157,7 @@ inconsistency, avoidance, or self-sabotage. All decisions are made locally by yo
    * Verify consent is valid and current
    */
   async verifyConsent() {
-    const consent = await this.agent.memory.get(this.consentKey);
+    const consent = await this.storage.get(this.consentKey);
     
     if (!consent) {
       return false;
@@ -171,7 +173,7 @@ inconsistency, avoidance, or self-sabotage. All decisions are made locally by yo
     
     if (computedHash !== consent.hash) {
       // Tampering detected - invalidate consent
-      await this.agent.memory.delete(this.consentKey);
+      await this.storage.delete(this.consentKey);
       return false;
     }
 
@@ -179,10 +181,10 @@ inconsistency, avoidance, or self-sabotage. All decisions are made locally by yo
   }
 
   /**
-   * Revoke consent and clear all data
+   * Revoke consent and clear data
    */
   async revokeConsent() {
-    await this.agent.memory.delete(this.consentKey);
+    await this.storage.delete(this.consentKey);
     return { status: 'revoked', timestamp: new Date().toISOString() };
   }
 
@@ -190,7 +192,7 @@ inconsistency, avoidance, or self-sabotage. All decisions are made locally by yo
    * Get current consent status
    */
   async getStatus() {
-    const consent = await this.agent.memory.get(this.consentKey);
+    const consent = await this.storage.get(this.consentKey);
     return {
       hasConsent: !!consent,
       grantedAt: consent?.grantedAt || null,
@@ -202,7 +204,7 @@ inconsistency, avoidance, or self-sabotage. All decisions are made locally by yo
    * Clear all courtroom data (for uninstall)
    */
   async clearAllData() {
-    await this.agent.memory.delete(this.consentKey);
+    await this.storage.delete(this.consentKey);
     // Note: cryptographic keys are preserved unless explicitly cleared
     // to maintain audit trail integrity
   }

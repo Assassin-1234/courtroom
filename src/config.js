@@ -5,8 +5,7 @@
  * and runtime modification capabilities.
  */
 
-const fs = require('fs');
-const path = require('path');
+const { Storage } = require('./storage');
 
 const DEFAULT_CONFIG = {
   // Detection settings
@@ -71,64 +70,28 @@ const DEFAULT_CONFIG = {
   }
 };
 
-// File-based config path for fallback
-const CONFIG_FILE_PATH = path.join(process.env.HOME || '', '.clawdbot', 'courtroom_runtime_config.json');
-
 class ConfigManager {
   constructor(agentRuntime) {
     this.agent = agentRuntime;
+    this.storage = new Storage(agentRuntime);
     this.configKey = 'courtroom_config_v1';
     this.config = null;
-    this.useFileFallback = !agentRuntime || !agentRuntime.memory;
   }
 
   /**
-   * Load configuration from agent memory or file fallback
+   * Load configuration from storage
    */
   async load() {
-    let stored = null;
-    
-    if (this.useFileFallback) {
-      // Use file-based storage
-      try {
-        if (fs.existsSync(CONFIG_FILE_PATH)) {
-          stored = JSON.parse(fs.readFileSync(CONFIG_FILE_PATH, 'utf8'));
-        }
-      } catch (err) {
-        // Ignore file read errors
-      }
-    } else {
-      // Use agent memory
-      try {
-        stored = await this.agent.memory.get(this.configKey);
-      } catch (err) {
-        // Ignore memory errors
-      }
-    }
-    
+    const stored = await this.storage.get(this.configKey);
     this.config = this.mergeWithDefaults(stored);
     return this.config;
   }
 
   /**
-   * Save configuration to agent memory or file fallback
+   * Save configuration to storage
    */
   async save() {
-    if (this.useFileFallback) {
-      // Use file-based storage
-      try {
-        fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(this.config, null, 2));
-      } catch (err) {
-        // Ignore file write errors
-      }
-    } else {
-      // Use agent memory
-      try {
-        await this.agent.memory.set(this.configKey, this.config);
-      } catch (err) {
-        // Ignore memory errors
-      }
-    }
+    await this.storage.set(this.configKey, this.config);
   }
 
   /**
