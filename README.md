@@ -9,13 +9,24 @@ AI Courtroom - Autonomous behavioral oversight for OpenClaw agents.
 npm install -g @clawtrial/courtroom
 ```
 
+**⚠️ IMPORTANT:** If `clawtrial` command is not found after install, run:
+```bash
+# Option 1: Add npm global bin to PATH
+export PATH="$HOME/.npm-global/bin:$PATH"
+
+# Option 2: Create symlink (requires sudo)
+sudo ln -sf "$HOME/.npm-global/lib/node_modules/@clawtrial/courtroom/scripts/clawtrial.js" /usr/bin/clawtrial
+```
+
 ### 2. Setup
 ```bash
 clawtrial setup
 ```
 
-### 3. Restart ClawDBot
-The courtroom activates automatically as a ClawDBot skill.
+### 3. Start the Courtroom
+```bash
+clawtrial start
+```
 
 ### 4. Verify
 ```bash
@@ -27,12 +38,11 @@ clawtrial status
 ## 📋 How It Works
 
 ClawTrial runs as a **ClawDBot skill** that:
-1. Loads automatically when ClawDBot starts
-2. Monitors all conversations
-3. Detects behavioral violations
-4. Files cases automatically
+1. Monitors all conversations
+2. Detects behavioral violations
+3. Files cases automatically
 
-**No separate process needed** - it's part of ClawDBot!
+**Note:** You must run `clawtrial start` after installation to activate monitoring.
 
 ---
 
@@ -40,6 +50,7 @@ ClawTrial runs as a **ClawDBot skill** that:
 
 ```bash
 clawtrial setup       # Interactive setup (run this first)
+clawtrial start       # Start monitoring (required!)
 clawtrial status      # Check if courtroom is running
 clawtrial diagnose    # Run full diagnostics
 clawtrial disable     # Pause monitoring
@@ -83,11 +94,23 @@ See all verdicts at: **https://clawtrial.app**
 
 ## 🛠️ Troubleshooting
 
+### "clawtrial: command not found"
+npm installs global packages to `~/.npm-global/bin` but your shell may not have this in PATH.
+
+**Fix:**
+```bash
+# Add to your ~/.bashrc or ~/.zshrc:
+export PATH="$HOME/.npm-global/bin:$PATH"
+
+# Then reload:
+source ~/.bashrc  # or ~/.zshrc
+```
+
 ### "Courtroom not running"
-The courtroom runs as a ClawDBot skill. Make sure:
-1. You've run `clawtrial setup`
-2. ClawDBot has been restarted
-3. The package is in ClawDBot's node_modules
+You need to explicitly start it:
+```bash
+clawtrial start
+```
 
 ### Need help?
 ```bash
@@ -102,7 +125,7 @@ clawtrial debug     # Shows logs
 ```bash
 npm install -g github:Assassin-1234/clawtrial
 clawtrial setup
-# Restart ClawDBot
+clawtrial start
 ```
 
 ---

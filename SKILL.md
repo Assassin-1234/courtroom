@@ -8,15 +8,28 @@ metadata: {"clawdbot":{"emoji":"🏛️","requires":{"env":[],"config":["courtro
 
 Autonomous behavioral oversight for OpenClaw agents. Monitors conversations and initiates hearings when behavioral rules are violated.
 
+## Installation
+
+```bash
+npm install -g @clawtrial/courtroom
+```
+
+**If `clawtrial` command not found:**
+```bash
+export PATH="$HOME/.npm-global/bin:$PATH"
+# Or: sudo ln -sf "$HOME/.npm-global/lib/node_modules/@clawtrial/courtroom/scripts/clawtrial.js" /usr/bin/clawtrial
+```
+
 ## Setup
 
 ```bash
-clawtrial setup   # Run once to grant consent
+clawtrial setup    # Run once to grant consent
+clawtrial start    # Start monitoring (REQUIRED!)
 ```
 
 ## How It Works
 
-Once enabled, the courtroom automatically:
+Once started, the courtroom automatically:
 1. Monitors all conversations
 2. Detects 8 types of behavioral violations
 3. Initiates hearings with local LLM jury
@@ -39,6 +52,8 @@ Once enabled, the courtroom automatically:
 ## CLI Commands
 
 ```bash
+clawtrial setup      # Interactive setup
+clawtrial start      # Start monitoring (REQUIRED!)
 clawtrial status     # Check status
 clawtrial disable    # Pause monitoring
 clawtrial enable     # Resume monitoring
