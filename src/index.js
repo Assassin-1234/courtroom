@@ -268,7 +268,56 @@ const plugin = {
   // Optional: activation function
   activate(api) {
     logger.info('PLUGIN', 'Activating courtroom plugin');
-  }
+  },
+  
+  // Register hooks for message monitoring
+  hooks: [
+    {
+      hookName: 'message_received',
+      pluginId: 'courtroom',
+      priority: 100,
+      handler: async (event, ctx) => {
+        logger.info('HOOK', 'message_received hook called', { 
+          messageId: event.message?.id,
+          role: event.message?.role,
+          hasContent: !!event.message?.content
+        });
+        
+        // Forward to skill's onMessage
+        if (skill && skill.initialized) {
+          try {
+            await skill.onMessage(event.message, ctx);
+            logger.info('HOOK', 'Message forwarded to skill');
+          } catch (err) {
+            logger.error('HOOK', 'Error forwarding message to skill', { error: err.message });
+          }
+        } else {
+          logger.warn('HOOK', 'Skill not initialized, message not forwarded');
+        }
+      }
+    },
+    {
+      hookName: 'message_sent',
+      pluginId: 'courtroom',
+      priority: 100,
+      handler: async (event, ctx) => {
+        logger.info('HOOK', 'message_sent hook called', {
+          messageId: event.message?.id,
+          role: event.message?.role
+        });
+        
+        // Forward to skill's onMessage for assistant messages
+        if (skill && skill.initialized && event.message?.role === 'assistant') {
+          try {
+            await skill.onMessage(event.message, ctx);
+            logger.info('HOOK', 'Assistant message forwarded to skill');
+          } catch (err) {
+            logger.error('HOOK', 'Error forwarding assistant message to skill', { error: err.message });
+          }
+        }
+      }
+    }
+  ]
 };
 
 // Export both the plugin (default) and the Courtroom class (named exports)
