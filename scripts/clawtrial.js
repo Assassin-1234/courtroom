@@ -354,6 +354,26 @@ skill.initialize(mockAgent).then(() => {
     log('⚠️  ClawTrial may not have started properly\n');
     log('   Run "clawtrial diagnose" for details\n');
   }
+
+// Stop command - kill the daemon
+function stop() {
+  const { getCourtroomStatus } = require('../src/daemon');
+  const status = getCourtroomStatus();
+  
+  if (!status.running) {
+    log('\n🏛️  ClawTrial is not running\n');
+    return;
+  }
+  
+  log('\n🏛️  Stopping ClawTrial...\n');
+  
+  try {
+    process.kill(status.pid, 'SIGTERM');
+    log('✅ ClawTrial stopped\n');
+  } catch (err) {
+    log('⚠️  Could not stop process: ' + err.message + '\n');
+  }
+}
 }
 
 
@@ -538,6 +558,7 @@ function help() {
   log('  revoke             - Revoke consent and uninstall');
   log('  debug [full|clear] - View or clear debug logs');
   log('  start              - Start the courtroom manually');
+  log('  stop               - Stop the courtroom daemon');
   log('  diagnose           - Run diagnostics');
   log('  help               - Show this help message');
   log('');
@@ -574,6 +595,9 @@ async function main() {
       break;
     case 'start':
       await start();
+      break;
+    case 'stop':
+      stop();
       break;
     case 'diagnose':
       diagnose();
