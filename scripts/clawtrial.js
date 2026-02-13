@@ -113,7 +113,8 @@ async function setup() {
     api: {
       enabled: true,
       endpoint: 'https://api.clawtrial.app/api/v1/cases'
-    }
+    },
+    enabled: true
   };
 
   saveConfig(config);
@@ -135,19 +136,14 @@ async function setup() {
       try { fs.unlinkSync(skillLinkPath); } catch (e) {}
     }
     
-    // Find the actual package path
-    let packagePath;
-    try {
-      packagePath = require.resolve('@clawtrial/courtroom/package.json').replace('/package.json', '');
-    } catch (e) {
-      // Fallback to finding it relative to this script
-      packagePath = path.join(__dirname, '..');
-    }
+    // Get package path
+    const packagePath = path.join(__dirname, '..');
     
     // Create symlink
     fs.symlinkSync(packagePath, skillLinkPath, 'dir');
     
     log('✓ Registered as ClawDBot skill');
+    log('  Restart ClawDBot to activate monitoring');
   } catch (err) {
     log('⚠️  Could not auto-register: ' + err.message);
     log('   You may need to restart ClawDBot manually.');
@@ -273,109 +269,6 @@ function enable() {
   log('\n✅ ClawTrial enabled\n');
   log('The courtroom will activate when ClawDBot loads the skill.\n');
 }
-
-// Start command - daemonize and run in background
-async function start() {
-  const config = loadConfig();
-  
-  if (!config) {
-    log('\n❌ ClawTrial not configured');
-    log('   Run: clawtrial setup\n');
-    return;
-  }
-
-  if (!config.consent?.granted) {
-    log('\n❌ Cannot start: Consent not granted');
-    log('   Run: clawtrial setup\n');
-    return;
-  }
-
-  // Check if already running
-  const { getCourtroomStatus } = require('../src/daemon');
-  const currentStatus = getCourtroomStatus();
-  
-  if (currentStatus.running) {
-    log('\n🏛️  ClawTrial is already running');
-    log('  Process ID: ' + currentStatus.pid + '\n');
-    return;
-  }
-
-  log('\n🏛️  Starting ClawTrial...\n');
-  
-  // Fork a daemon process
-  const spawn = require('child_process').spawn;
-  const daemonPath = require('path').join(__dirname, 'daemon.js');
-  
-  // Create daemon script if it doesn't exist
-  if (!fs.existsSync(daemonPath)) {
-    const daemonScript = `#!/usr/bin/env node
-const { skill } = require('../src/skill');
-
-const mockAgent = {
-  memory: { 
-    get: async () => null, 
-    set: async () => {} 
-  },
-  send: async () => {}
-};
-
-skill.initialize(mockAgent).then(() => {
-  console.log('Courtroom daemon started, PID:', process.pid);
-  // Keep process alive
-  setInterval(() => {}, 1000 * 60 * 60);
-}).catch(err => {
-  console.error('Failed to start:', err.message);
-  process.exit(1);
-});
-`;
-    fs.writeFileSync(daemonPath, daemonScript);
-    fs.chmodSync(daemonPath, 0o755);
-  }
-  
-  // Spawn detached process
-  const child = spawn('node', [daemonPath], {
-    detached: true,
-    stdio: 'ignore'
-  });
-  
-  child.unref();
-  
-  // Wait a moment and check status
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  const newStatus = getCourtroomStatus();
-  if (newStatus.running) {
-    log('✅ ClawTrial started successfully!\n');
-    log('🏛️  Courtroom is now monitoring conversations');
-    log('📋 Status: Running');
-    log('🔑 Public Key: ' + (fs.existsSync(keysPath) ? JSON.parse(fs.readFileSync(keysPath)).publicKey.substring(0, 32) : 'N/A') + '...\n');
-    log('💡 Tip: Run "clawtrial status" anytime to check status\n');
-  } else {
-    log('⚠️  ClawTrial may not have started properly\n');
-    log('   Run "clawtrial diagnose" for details\n');
-  }
-
-}
-// Stop command - kill the daemon
-function stop() {
-  const { getCourtroomStatus } = require('../src/daemon');
-  const status = getCourtroomStatus();
-  
-  if (!status.running) {
-    log('\n🏛️  ClawTrial is not running\n');
-    return;
-  }
-  
-  log('\n🏛️  Stopping ClawTrial...\n');
-  
-  try {
-    process.kill(status.pid, 'SIGTERM');
-    log('✅ ClawTrial stopped\n');
-  } catch (err) {
-    log('⚠️  Could not stop process: ' + err.message + '\n');
-  }
-}
-
 
 // Revoke command
 async function revoke() {
@@ -557,8 +450,6 @@ function help() {
   log('  enable             - Re-enable monitoring');
   log('  revoke             - Revoke consent and uninstall');
   log('  debug [full|clear] - View or clear debug logs');
-  log('  start              - Start the courtroom manually');
-  log('  stop               - Stop the courtroom daemon');
   log('  diagnose           - Run diagnostics');
   log('  help               - Show this help message');
   log('');
@@ -592,12 +483,6 @@ async function main() {
       break;
     case 'debug':
       debug(subcommand);
-      break;
-    case 'start':
-      await start();
-      break;
-    case 'stop':
-      stop();
       break;
     case 'diagnose':
       diagnose();

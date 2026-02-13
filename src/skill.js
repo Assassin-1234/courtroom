@@ -101,9 +101,8 @@ class CourtroomSkill {
       this.core = new CourtroomCore(agentRuntime, configManager);
       
       // Override the autonomy hook registration since we're using onMessage
-      const originalRegisterHook = this.core.registerAutonomyHook.bind(this.core);
       this.core.registerAutonomyHook = () => {
-        logger.info('SKILL', 'Autonomy hook registered (using onMessage instead)');
+        logger.info('SKILL', 'Autonomy hook registration skipped (using onMessage)');
       };
       
       const result = await this.core.initialize();
@@ -118,18 +117,6 @@ class CourtroomSkill {
           publicKey: result.publicKey
         });
         
-        
-        // Register message handler with ClawDBot runtime if available
-        if (this.agent && this.agent.onMessage) {
-          this.agent.onMessage((message, context) => this.onMessage(message, context));
-          logger.info('SKILL', 'Registered message handler with runtime');
-        } else if (this.agent && this.agent.registerMessageHandler) {
-          this.agent.registerMessageHandler((message, context) => this.onMessage(message, context));
-          logger.info('SKILL', 'Registered message handler with runtime');
-        } else {
-          logger.warn('SKILL', 'No message handler registration method found - relying on ClawDBot skill system');
-        }
-
         logger.info('SKILL', 'Courtroom skill initialized successfully');
         console.log('\n🏛️  ClawTrial is monitoring conversations\n');
       } else {
