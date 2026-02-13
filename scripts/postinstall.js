@@ -29,27 +29,11 @@ try {
   }
 }
 
-
-
-// Fix clawtrial CLI symlink if needed
+// Get package paths
 const packagePath = path.join(__dirname, '..');
 const cliPath = path.join(packagePath, 'scripts', 'clawtrial.js');
-const globalBinPath = '/usr/bin/clawtrial';
 
-if (fs.existsSync(globalBinPath)) {
-  try {
-    const currentTarget = fs.readlinkSync(globalBinPath);
-    const expectedTarget = cliPath;
-    
-    if (currentTarget !== expectedTarget && !currentTarget.includes('@clawtrial')) {
-      console.log('🔗 Fixing clawtrial CLI symlink...');
-      try {
-        fs.unlinkSync(globalBinPath);
-        fs.symlinkSync(cliPath, globalBinPath);
-        fs.chmodSync(globalBinPath, 0o755);
-        console.log('✓ CLI symlink fixed');
-
-// Create /usr/bin symlink for global access
+// Try to create /usr/bin symlink (requires sudo, may fail)
 const usrBinPath = '/usr/bin/clawtrial';
 if (!fs.existsSync(usrBinPath)) {
   try {
@@ -57,18 +41,7 @@ if (!fs.existsSync(usrBinPath)) {
     fs.chmodSync(usrBinPath, 0o755);
     console.log('✓ Created global CLI symlink');
   } catch (err) {
-    console.log('⚠️  Could not create global symlink (may need sudo)');
-    console.log('   Run: sudo ln -sf ' + cliPath + ' ' + usrBinPath);
-  }
-}
-
-      } catch (err) {
-        console.log('⚠️  Could not fix CLI symlink (may need sudo)');
-        console.log('   Run: sudo ln -sf ' + cliPath + ' ' + globalBinPath);
-      }
-    }
-  } catch (e) {
-    // Not a symlink, ignore
+    // Silent fail - will show instructions at end
   }
 }
 
@@ -83,8 +56,6 @@ if (fs.existsSync(configPath)) {
       fs.mkdirSync(SKILLS_DIR, { recursive: true });
     }
     
-    // Get package path
-    const packagePath = path.join(__dirname, '..');
     const skillLinkPath = path.join(SKILLS_DIR, 'courtroom');
     
     // Remove old link
@@ -95,10 +66,19 @@ if (fs.existsSync(configPath)) {
     // Create symlink
     fs.symlinkSync(packagePath, skillLinkPath, 'junction');
     console.log('✓ Registered as ClawDBot skill');
-    console.log('  Restart ClawDBot to activate');
   } catch (err) {
     console.log('⚠️  Could not register skill:', err.message);
   }
 }
 
+// Show next steps
+console.log('');
+console.log('📋 Next Steps:');
+console.log('  1. If "clawtrial" command not found, run:');
+console.log('     export PATH="$HOME/.npm-global/bin:$PATH"');
+console.log('     # OR: sudo ln -sf "$HOME/.npm-global/lib/node_modules/@clawtrial/courtroom/scripts/clawtrial.js" /usr/bin/clawtrial');
+console.log('');
+console.log('  2. Run setup:');
+console.log('     clawtrial setup');
+console.log('     clawtrial start');
 console.log('');
