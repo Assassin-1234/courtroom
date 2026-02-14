@@ -269,34 +269,54 @@ const plugin = {
       // Register for incoming messages
       api.registerHook(['message_received'], async (event, ctx) => {
         logger.info('HOOK', 'message_received hook called', { 
-          messageId: event.message?.id,
-          role: event.message?.role
+          from: event.from,
+          contentLength: event.content?.length,
+          channelId: ctx?.channelId
         });
         
         if (skill && skill.initialized) {
           try {
-            await skill.onMessage(event.message, ctx);
+            // Convert hook event to skill message format
+            const message = {
+              role: 'user',
+              content: event.content,
+              timestamp: event.timestamp,
+              from: event.from,
+              metadata: event.metadata
+            };
+            await skill.onMessage(message, ctx);
             logger.info('HOOK', 'Message forwarded to skill');
           } catch (err) {
             logger.error('HOOK', 'Error forwarding message to skill', { error: err.message });
           }
+        } else {
+          logger.warn('HOOK', 'Skill not initialized, message not processed');
         }
       }, { name: 'courtroom_message_received' });
       
       // Register for outgoing messages
       api.registerHook(['message_sent'], async (event, ctx) => {
         logger.info('HOOK', 'message_sent hook called', {
-          messageId: event.message?.id,
-          role: event.message?.role
+          contentLength: event.content?.length,
+          channelId: ctx?.channelId
         });
         
-        if (skill && skill.initialized && event.message?.role === 'assistant') {
+        if (skill && skill.initialized) {
           try {
-            await skill.onMessage(event.message, ctx);
+            // Convert hook event to skill message format
+            const message = {
+              role: 'assistant',
+              content: event.content,
+              timestamp: event.timestamp,
+              metadata: event.metadata
+            };
+            await skill.onMessage(message, ctx);
             logger.info('HOOK', 'Assistant message forwarded to skill');
           } catch (err) {
             logger.error('HOOK', 'Error forwarding assistant message to skill', { error: err.message });
           }
+        } else {
+          logger.warn('HOOK', 'Skill not initialized, message not processed');
         }
       }, { name: 'courtroom_message_sent' });
       
