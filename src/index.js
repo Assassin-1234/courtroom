@@ -262,12 +262,13 @@ const plugin = {
       }
     }
     
-    // Register hooks for message monitoring using the proper API
-    if (api.registerHook) {
-      logger.info('PLUGIN', 'Registering message hooks');
+    // Register hooks for message monitoring using api.on() for typed hooks
+    // api.on() registers typed hooks directly without checking config.hooks.internal.enabled
+    if (api.on) {
+      logger.info('PLUGIN', 'Registering message hooks via api.on()');
       
       // Register for incoming messages
-      api.registerHook(['message_received'], async (event, ctx) => {
+      api.on('message_received', async (event, ctx) => {
         logger.info('HOOK', 'message_received hook called', { 
           from: event.from,
           contentLength: event.content?.length,
@@ -292,10 +293,10 @@ const plugin = {
         } else {
           logger.warn('HOOK', 'Skill not initialized, message not processed');
         }
-      }, { name: 'courtroom_message_received' });
+      }, { priority: 100 });
       
       // Register for outgoing messages
-      api.registerHook(['message_sent'], async (event, ctx) => {
+      api.on('message_sent', async (event, ctx) => {
         logger.info('HOOK', 'message_sent hook called', {
           contentLength: event.content?.length,
           channelId: ctx?.channelId
@@ -318,11 +319,32 @@ const plugin = {
         } else {
           logger.warn('HOOK', 'Skill not initialized, message not processed');
         }
+      }, { priority: 100 });
+      
+      logger.info('PLUGIN', 'Message hooks registered successfully via api.on()');
+    } else if (api.registerHook) {
+      // Fallback to registerHook if on() is not available
+      logger.info('PLUGIN', 'Registering message hooks via api.registerHook()');
+      
+      api.registerHook(['message_received'], async (event, ctx) => {
+        logger.info('HOOK', 'message_received hook called');
+        if (skill && skill.initialized) {
+          const message = { role: 'user', content: event.content, timestamp: event.timestamp };
+          await skill.onMessage(message, ctx);
+        }
+      }, { name: 'courtroom_message_received' });
+      
+      api.registerHook(['message_sent'], async (event, ctx) => {
+        logger.info('HOOK', 'message_sent hook called');
+        if (skill && skill.initialized) {
+          const message = { role: 'assistant', content: event.content, timestamp: event.timestamp };
+          await skill.onMessage(message, ctx);
+        }
       }, { name: 'courtroom_message_sent' });
       
-      logger.info('PLUGIN', 'Message hooks registered successfully');
+      logger.info('PLUGIN', 'Message hooks registered via api.registerHook()');
     } else {
-      logger.warn('PLUGIN', 'api.registerHook not available, hooks not registered');
+      logger.warn('PLUGIN', 'No hook registration method available');
     }
     
     logger.info('PLUGIN', 'Courtroom plugin registered successfully');
