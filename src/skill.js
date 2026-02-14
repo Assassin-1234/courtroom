@@ -267,7 +267,7 @@ class CourtroomSkill {
    * @param {Object} detection - The detection result
    */
   async initiateHearing(detection) {
-    logger.info('SKILL', 'Initiating hearing', { offense: detection.offense });
+    logger.info('SKILL', 'Initiating hearing', { offenseId: detection.offenseId, offenseName: detection.offenseName });
     
     try {
       const verdict = await this.core.hearing.conductHearing(detection);
@@ -279,7 +279,7 @@ class CourtroomSkill {
           casesFiled: this.core.caseCount,
           lastCase: {
             timestamp: new Date().toISOString(),
-            offense: detection.offense,
+            offense: { offenseId: detection.offenseId, offenseName: detection.offenseName },
             verdict: verdict.verdict
           }
         });
@@ -293,7 +293,7 @@ class CourtroomSkill {
         if (this.agent && this.agent.send) {
           try {
             await this.agent.send({
-              text: `🏛️ **CASE FILED**: ${detection.offense.offenseName}\n📋 Case ID: ${verdict.caseId}\n⚖️  Verdict: ${verdict.verdict}\n🔗 View: https://clawtrial.app/cases/${verdict.caseId}`
+              text: `🏛️ **CASE FILED**: ${detection.offenseName}\n📋 Case ID: ${verdict.caseId}\n⚖️  Verdict: ${verdict.verdict}\n🔗 View: https://clawtrial.app/cases/${verdict.caseId}`
             });
           } catch (sendErr) {
             logger.warn('SKILL', 'Could not send notification', { error: sendErr.message });
@@ -301,7 +301,7 @@ class CourtroomSkill {
         }
         
         // Also log to console for visibility
-        console.log(`\n🏛️  CASE FILED: ${detection.offense.offenseName}`);
+        console.log(`\n🏛️  CASE FILED: ${detection.offenseName}`);
         console.log(`📋 Case ID: ${verdict.caseId}`);
         console.log(`⚖️  Verdict: ${verdict.verdict}`);
         console.log(`🔗 View: https://clawtrial.app/cases/${verdict.caseId}\n`);
