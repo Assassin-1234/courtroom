@@ -240,10 +240,14 @@ class CourtroomSkill {
           confidence: result.offense?.confidence
         });
         
-        // Convert to detection format
+        // Convert to detection format that hearing expects
         const detection = {
           triggered: true,
-          offense: result.offense,
+          offenseId: result.offense.offenseId,
+          offenseName: result.offense.offenseName,
+          severity: result.offense.severity,
+          confidence: result.offense.confidence,
+          evidence: result.offense.evidence,
           reasoning: result.reasoning
         };
         
