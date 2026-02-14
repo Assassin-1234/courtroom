@@ -248,7 +248,8 @@ class CourtroomSkill {
           severity: result.offense.severity,
           confidence: result.offense.confidence,
           evidence: result.offense.evidence,
-          reasoning: result.reasoning
+          reasoning: result.reasoning,
+          humorTriggers: result.humorTriggers || []
         };
         
         await this.initiateHearing(detection);
