@@ -263,7 +263,7 @@ class CourtroomSkill {
         confidence: verdict.confidence || 0.8
       };
       
-      await this.core.punishment.execute(punishmentVerdict);
+      await this.core.punishment.executePunishment(punishmentVerdict);
       await this.core.api.submitCase(punishmentVerdict);
       
       logger.info('SKILL', 'Case filed', { caseId: this.pendingHearing.caseId });
