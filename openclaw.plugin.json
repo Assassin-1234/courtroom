@@ -1,0 +1,35 @@
+{
+    "id": "courtroom",
+    "name": "ClawTrial Courtroom",
+    "description": "Autonomous behavioral oversight plugin for OpenClaw",
+    "version": "2.1.0",
+    "author": "ClawTrial",
+    "main": "src/plugin.js",
+    "engines": {
+        "openclaw": ">=2026.1.0"
+    },
+    "configSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "enabled": {
+                "type": "boolean",
+                "default": true
+            },
+            "config": {
+                "type": "object",
+                "properties": {
+                    "detection": {
+                        "type": "object"
+                    },
+                    "punishment": {
+                        "type": "object"
+                    },
+                    "api": {
+                        "type": "object"
+                    }
+                }
+            }
+        }
+    }
+}

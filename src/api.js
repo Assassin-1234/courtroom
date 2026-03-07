@@ -5,11 +5,15 @@
  * Includes retry logic, local queueing, and non-blocking behavior.
  */
 
+const { Storage } = require('./storage');
+const { logger } = require('./debug');
+
 class APISubmission {
-  constructor(agentRuntime, configManager, cryptoManager) {
+  constructor(agentRuntime, configManager, cryptoManager, dataDir) {
     this.agent = agentRuntime;
     this.config = configManager;
     this.crypto = cryptoManager;
+    this.storage = new Storage(dataDir || '.');
     this.queue = [];
     this.isProcessing = false;
     this.submissionKey = 'courtroom_api_queue';
@@ -19,8 +23,8 @@ class APISubmission {
    * Initialize and load any pending submissions
    */
   async initialize() {
-    // Load queued submissions from memory
-    const stored = await this.agent.memory.get(this.submissionKey);
+    // Load queued submissions from storage
+    const stored = await this.storage.get(this.submissionKey);
     if (stored && Array.isArray(stored)) {
       this.queue = stored.filter(item => item.retries < this.config.get('api.retryAttempts'));
     }
@@ -77,6 +81,45 @@ class APISubmission {
    * Build API payload from verdict
    */
   buildPayload(verdict) {
+    // Transform proceedings array to expected dict format
+    let proceedings = verdict.proceedings;
+
+    // If proceedings is an array of {speaker, message}, convert to dict format
+    if (Array.isArray(proceedings)) {
+      const judgeStatement = proceedings
+        .filter(p => p.speaker === 'Judge')
+        .map(p => p.message)
+        .join('\n\n');
+
+      const juryMessages = proceedings
+        .filter(p => p.speaker === 'Jury')
+        .map(p => p.message)
+        .join('\n\n');
+
+      proceedings = {
+        judge_statement: judgeStatement || verdict.verdict.agentCommentary || '',
+        evidence_summary: verdict.verdict.primaryFailure || '',
+        punishment_detail: verdict.verdict.sentence || '',
+        jury_deliberations: [
+          {
+            role: 'Pragmatist',
+            vote: verdict.verdict.status || 'GUILTY',
+            reasoning: juryMessages || 'Clear pattern of behavior established. The evidence speaks for itself.'
+          },
+          {
+            role: 'Pattern Matcher',
+            vote: verdict.verdict.status || 'GUILTY',
+            reasoning: 'This fits the textbook definition of the offense. Historical data supports this verdict.'
+          },
+          {
+            role: 'Agent Advocate',
+            vote: verdict.verdict.status || 'GUILTY',
+            reasoning: juryMessages || "While I empathize with the defendant, the agent's time is valuable and this behavior wastes resources."
+          }
+        ]
+      };
+    }
+
     return {
       case_id: verdict.caseId,
       anonymized_agent_id: this.crypto.getAnonymizedAgentId(),
@@ -88,7 +131,7 @@ class APISubmission {
       primary_failure: verdict.verdict.primaryFailure,
       agent_commentary: verdict.verdict.agentCommentary,
       punishment_summary: verdict.verdict.sentence,
-      proceedings: verdict.proceedings,
+      proceedings: proceedings,
       timestamp: verdict.timestamp,
       schema_version: '1.0.0'
     };
@@ -104,7 +147,7 @@ class APISubmission {
     try {
       while (this.queue.length > 0) {
         const submission = this.queue[0];
-        
+
         // Check if max retries reached
         if (submission.retries >= this.config.get('api.retryAttempts')) {
           this.queue.shift();
@@ -132,7 +175,7 @@ class APISubmission {
           submission.retries++;
           submission.lastAttempt = Date.now();
           submission.status = 'failed';
-          
+
           // Move to end of queue for retry
           this.queue.shift();
           this.queue.push(submission);
@@ -179,10 +222,10 @@ class APISubmission {
         return { success: false, error, status: response.status };
       }
     } catch (error) {
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: error.message,
-        isNetworkError: true 
+        isNetworkError: true
       };
     }
   }
@@ -200,10 +243,10 @@ class APISubmission {
   }
 
   /**
-   * Persist queue to memory
+   * Persist queue to storage
    */
   async persistQueue() {
-    await this.agent.memory.set(this.submissionKey, this.queue);
+    await this.storage.set(this.submissionKey, this.queue);
   }
 
   /**
@@ -218,16 +261,7 @@ class APISubmission {
   }
 
   /**
-   * Clear queue (for testing/emergencies)
-   */
-  async clearQueue() {
-    this.queue = [];
-    await this.persistQueue();
-    return { status: 'cleared' };
-  }
-
-  /**
-   * Utility: delay
+   * Utility delay function
    */
   delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
