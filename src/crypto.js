@@ -12,9 +12,9 @@ const { Storage } = require('./storage');
 const KEY_STORAGE_KEY = 'courtroom_signing_key_v1';
 
 class CryptoManager {
-  constructor(agentRuntime) {
+  constructor(agentRuntime, dataDir) {
     this.agent = agentRuntime;
-    this.storage = new Storage(agentRuntime);
+    this.storage = new Storage(dataDir || '.');
     this.keyPair = null;
     this.publicKeyHex = null;
   }
@@ -26,7 +26,7 @@ class CryptoManager {
   async initialize() {
     // Try to load existing keys
     const stored = await this.storage.get(KEY_STORAGE_KEY);
-    
+
     if (stored && stored.secretKey) {
       // Restore from storage
       this.keyPair = {
@@ -87,7 +87,7 @@ class CryptoManager {
 
     // Create canonical payload string
     const canonicalPayload = this.canonicalizePayload(casePayload);
-    
+
     // Sign
     const messageBytes = Buffer.from(canonicalPayload, 'utf8');
     const signature = nacl.sign.detached(messageBytes, this.keyPair.secretKey);
@@ -140,7 +140,7 @@ class CryptoManager {
   getAnonymizedAgentId() {
     const agentId = this.agent?.id || 'unknown';
     const salt = this.publicKeyHex?.substring(0, 32) || 'courtroom_salt';
-    
+
     return createHash('sha256')
       .update(agentId + salt)
       .digest('hex')

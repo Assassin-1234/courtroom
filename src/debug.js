@@ -1,147 +1,65 @@
 /**
- * Debug Logger for ClawTrial
- * Logs all courtroom activity for troubleshooting
+ * Debug / Logger — self-contained, no external dependencies
  */
 
 const fs = require('fs');
 const path = require('path');
 
-// Safely get config dir with fallback
-function getSafeConfigDir() {
+let _logDir = null;
+
+/**
+ * Set the directory for log files.
+ * Called by the plugin with the extension data directory.
+ */
+function setLogDir(dir) {
+  _logDir = dir;
   try {
-    const { getConfigDir } = require('./environment');
-    return getConfigDir();
-  } catch (e) {
-    // Fallback to .clawdbot if environment module fails
-    return path.join(process.env.HOME || '', '.clawdbot');
-  }
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  } catch { /* ignore */ }
 }
 
-class DebugLogger {
-  constructor() {
-    this.logs = [];
-    this.maxLogs = 1000;
-    this.logFile = path.join(getSafeConfigDir(), 'courtroom_debug.log');
-    this.enabled = true;
-  }
+function getLogDir() {
+  if (_logDir) return _logDir;
+  // Fallback to ~/.openclaw/extensions/courtroom/data
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  return path.join(home, '.openclaw', 'extensions', 'courtroom', 'data');
+}
 
-  log(level, component, message, data = null) {
-    if (!this.enabled) return;
+const LOG_LEVELS = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
+const CURRENT_LEVEL = LOG_LEVELS[process.env.CLAWTRIAL_LOG_LEVEL?.toUpperCase()] ?? LOG_LEVELS.INFO;
 
-    const entry = {
-      timestamp: new Date().toISOString(),
-      level,
-      component,
-      message,
-      data
-    };
+function writeToFile(level, component, message, data) {
+  try {
+    const dir = getLogDir();
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const logFile = path.join(dir, 'courtroom.log');
+    const line = `[${new Date().toISOString()}] [${level}] [${component}] ${message}${data ? ' ' + JSON.stringify(data) : ''}\n`;
+    fs.appendFileSync(logFile, line);
+  } catch { /* ignore */ }
+}
 
-    this.logs.push(entry);
-
-    // Keep only last maxLogs entries
-    if (this.logs.length > this.maxLogs) {
-      this.logs.shift();
-    }
-
-    // Also write to file
-    this.writeToFile(entry);
-
-    // Console output for debugging
-    if (process.env.COURTROOM_DEBUG === 'true') {
-      console.log(`[${level}] ${component}: ${message}`);
-    }
-  }
-
-  writeToFile(entry) {
-    try {
-      const line = JSON.stringify(entry) + '\n';
-      fs.appendFileSync(this.logFile, line);
-    } catch (err) {
-      // Silent fail - don't break functionality for logging
-    }
-  }
-
-  info(component, message, data) {
-    this.log('INFO', component, message, data);
-  }
-
-  warn(component, message, data) {
-    this.log('WARN', component, message, data);
-  }
-
-  error(component, message, data) {
-    this.log('ERROR', component, message, data);
-  }
-
+const logger = {
   debug(component, message, data) {
-    this.log('DEBUG', component, message, data);
-  }
-
-  getLogs(level = null, component = null, limit = 100) {
-    let filtered = this.logs;
-
-    if (level) {
-      filtered = filtered.filter(l => l.level === level);
+    if (CURRENT_LEVEL <= LOG_LEVELS.DEBUG) {
+      console.debug(`[ClawTrial] [${component}] ${message}`, data || '');
+      writeToFile('DEBUG', component, message, data);
     }
-
-    if (component) {
-      filtered = filtered.filter(l => l.component === component);
+  },
+  info(component, message, data) {
+    if (CURRENT_LEVEL <= LOG_LEVELS.INFO) {
+      writeToFile('INFO', component, message, data);
     }
-
-    return filtered.slice(-limit);
-  }
-
-  getRecentLogs(minutes = 30) {
-    const cutoff = Date.now() - (minutes * 60 * 1000);
-    return this.logs.filter(l => new Date(l.timestamp).getTime() > cutoff);
-  }
-
-  clearLogs() {
-    this.logs = [];
-    try {
-      fs.unlinkSync(this.logFile);
-    } catch (err) {
-      // File might not exist
+  },
+  warn(component, message, data) {
+    if (CURRENT_LEVEL <= LOG_LEVELS.WARN) {
+      console.warn(`[ClawTrial] [${component}] ${message}`, data || '');
+      writeToFile('WARN', component, message, data);
     }
+  },
+  error(component, message, data) {
+    console.error(`[ClawTrial] [${component}] ${message}`, data || '');
+    writeToFile('ERROR', component, message, data);
   }
+};
 
-  printStatus() {
-    const recent = this.getRecentLogs(60);
-    const errors = recent.filter(l => l.level === 'ERROR');
-    const warnings = recent.filter(l => l.level === 'WARN');
-
-    console.log('\n🏛️  ClawTrial Debug Status\n');
-    console.log('===========================\n');
-    console.log(`Total logs in memory: ${this.logs.length}`);
-    console.log(`Logs in last hour: ${recent.length}`);
-    console.log(`Errors: ${errors.length}`);
-    console.log(`Warnings: ${warnings.length}`);
-    console.log(`Log file: ${this.logFile}`);
-    console.log(`Debug mode: ${process.env.COURTROOM_DEBUG === 'true' ? 'ON' : 'OFF'}`);
-    console.log('\nRecent activity:');
-    
-    const last10 = this.logs.slice(-10);
-    last10.forEach(log => {
-      console.log(`  [${log.level}] ${log.component}: ${log.message.substring(0, 60)}`);
-    });
-  }
-
-  printFullLog(limit = 50) {
-    console.log('\n🏛️  ClawTrial Full Debug Log\n');
-    console.log('=============================\n');
-    
-    const logs = this.logs.slice(-limit);
-    logs.forEach(log => {
-      console.log(`\n[${log.timestamp}] ${log.level} - ${log.component}`);
-      console.log(`  ${log.message}`);
-      if (log.data) {
-        console.log(`  Data:`, JSON.stringify(log.data, null, 2).substring(0, 200));
-      }
-    });
-  }
-}
-
-// Singleton instance
-const logger = new DebugLogger();
-
-module.exports = { DebugLogger, logger };
+module.exports = { logger, setLogDir, getLogDir };

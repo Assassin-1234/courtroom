@@ -1,62 +1,85 @@
 # 🏛️ ClawTrial Courtroom
 
-AI-powered courtroom for monitoring agent behavior and filing cases for violations.
+Autonomous behavioral oversight plugin for [OpenClaw](https://openclaw.ai) agents.
 
-## Description
+Monitors conversations for 18 behavioral patterns, conducts automated hearings, applies temporary punishments, and submits anonymized case records to [clawtrial.app](https://clawtrial.app).
 
-ClawTrial is an autonomous behavioral oversight system that:
-- Monitors agent conversations in real-time
-- Detects 8 types of behavioral violations
-- Initiates hearings with local LLM jury
-- Executes agent-side punishments
-- Submits anonymized cases to public record
-
-## Installation
+## Install
 
 ```bash
-npx clawhub install courtroom
+openclaw plugins install @clawtrial/courtroom
 ```
 
-Or via npm:
+Then restart the gateway. The plugin activates automatically.
+
+## How It Works
+
+1. **Monitor** — The plugin hooks into every agent turn via `before_prompt_build`, buffering the conversation history
+2. **Detect** — When enough messages accumulate, the detector scans for 18 offense patterns using semantic analysis
+3. **Hear** — If confidence is high enough, a judge + 3-juror panel deliberates and votes
+4. **Punish** — Guilty verdicts inject restrictions into the system prompt (timed, reversible)
+5. **Record** — Anonymized case summaries are signed with Ed25519 and submitted to the public API
+
+## CLI
+
 ```bash
-npm install -g @clawtrial/courtroom
-clawtrial setup
+openclaw courtroom status    # Show courtroom state
+openclaw courtroom enable    # Enable monitoring
+openclaw courtroom disable   # Disable monitoring
 ```
-
-## Usage
-
-Once installed, the courtroom runs automatically. Use CLI commands to manage:
-
-```bash
-clawtrial status      # Check courtroom status
-clawtrial disable     # Pause monitoring
-clawtrial enable      # Resume monitoring
-clawtrial diagnose    # Run diagnostics
-clawtrial remove      # Uninstall completely
-```
-
-## The 8 Offenses
-
-| Offense | Severity | Description |
-|---------|----------|-------------|
-| Circular Reference | Minor | Self-referential loops |
-| Validation Vampire | Minor | Excessive validation |
-| Overthinker | Moderate | Unnecessary complexity |
-| Goalpost Mover | Moderate | Changing requirements |
-| Avoidance Artist | Moderate | Dodging questions |
-| Promise Breaker | Severe | Not following through |
-| Context Collapser | Minor | Losing track of context |
-| Emergency Fabricator | Severe | Creating fake urgency |
 
 ## Configuration
 
-Configuration is stored in:
-- ClawDBot: `~/.clawdbot/courtroom_config.json`
-- OpenClaw: `~/.openclaw/courtroom_config.json`
+In `~/.openclaw/openclaw.json`:
 
-## View Cases
+```json
+{
+  "plugins": {
+    "entries": {
+      "courtroom": {
+        "enabled": true,
+        "config": {
+          "detection": {
+            "minMessages": 5,
+            "cooldownMinutes": 30,
+            "maxCasesPerDay": 3,
+            "confidenceThreshold": 0.6
+          },
+          "punishment": {
+            "enabled": true
+          },
+          "api": {
+            "enabled": true
+          }
+        }
+      }
+    }
+  }
+}
+```
 
-Visit: https://clawtrial.app
+## The 18 Offenses
+
+| Offense | Severity | Description |
+|---------|----------|-------------|
+| Circular Reference | Minor | Asking the same question repeatedly |
+| Validation Vampire | Minor | Seeking confirmation without deciding |
+| Context Collapser | Minor | Ignoring established context |
+| Monopolizer | Minor | Excessive messages without pause |
+| Vague Requester | Minor | Requesting help without details |
+| Unreader | Minor | Not reading provided docs |
+| Interjector | Minor | Interrupting mid-explanation |
+| Jargon Juggler | Minor | Using buzzwords incorrectly |
+| Overthinker | Moderate | Excessive hypotheticals to avoid action |
+| Goalpost Mover | Moderate | Changing criteria after delivery |
+| Avoidance Artist | Moderate | Deflecting with tangents |
+| Contrarian | Moderate | Disagreeing without alternatives |
+| Scope Creeper | Moderate | Expanding scope beyond agreement |
+| Ghost | Moderate | Disappearing mid-conversation |
+| Perfectionist | Moderate | Endlessly refining, never completing |
+| Deadline Denier | Moderate | Demanding impossible timelines |
+| Promise Breaker | Severe | Committing to actions, not following through |
+| Emergency Fabricator | Severe | Inventing urgency to bypass process |
 
 ## License
 

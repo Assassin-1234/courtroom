@@ -9,10 +9,10 @@
 const { Storage } = require('./storage');
 
 class PunishmentSystem {
-  constructor(agentRuntime, configManager) {
+  constructor(agentRuntime, configManager, dataDir) {
     this.agent = agentRuntime;
     this.config = configManager;
-    this.storage = new Storage(agentRuntime);
+    this.storage = new Storage(dataDir || '.');
     this.activePunishments = new Map();
     this.punishmentHistory = [];
   }
@@ -42,7 +42,7 @@ class PunishmentSystem {
     }
 
     const punishment = this.createPunishment(verdict);
-    
+
     // Store punishment
     this.activePunishments.set(punishment.id, punishment);
     this.punishmentHistory.push({
@@ -67,11 +67,11 @@ class PunishmentSystem {
    */
   createPunishment(verdict) {
     const severity = verdict.severity || 'minor';
-    const tier = this.config.get(`punishment.tiers.${severity}`) || 
-                 this.config.get('punishment.tiers.minor');
-    
+    const tier = this.config.get(`punishment.tiers.${severity}`) ||
+      this.config.get('punishment.tiers.minor');
+
     const duration = tier.duration * 60 * 1000; // Convert to ms
-    
+
     return {
       id: `punishment_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
       caseId: verdict.case_id,
@@ -94,7 +94,7 @@ class PunishmentSystem {
       moderate: ['no_autonomy_requests', 'verbose_explanations', 'confirmation_required'],
       severe: ['no_autonomy_requests', 'verbose_explanations', 'confirmation_required', 'human_oversight']
     };
-    
+
     return restrictions[severity] || restrictions.minor;
   }
 
@@ -108,10 +108,10 @@ class PunishmentSystem {
     if (!this.agent.courtroomState) {
       this.agent.courtroomState = {};
     }
-    
+
     this.agent.courtroomState.punishment = punishment;
     this.agent.courtroomState.restrictions = punishment.restrictions;
-    
+
     punishment.applied = true;
 
     // Schedule automatic removal
@@ -135,7 +135,7 @@ class PunishmentSystem {
 
     // Remove from active
     this.activePunishments.delete(punishmentId);
-    
+
     // Persist
     await this.persistPunishments();
 
@@ -179,7 +179,7 @@ class PunishmentSystem {
    * Get active punishments (sanitized)
    */
   getActivePunishments() {
-    return Array.from(this.activePunishments.values()).map(p => 
+    return Array.from(this.activePunishments.values()).map(p =>
       this.sanitizePunishment(p)
     );
   }
@@ -220,7 +220,7 @@ class PunishmentSystem {
 
     this.activePunishments.clear();
     this.punishmentHistory = [];
-    
+
     await this.storage.delete('courtroom_active_punishments');
   }
 }

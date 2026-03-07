@@ -6,13 +6,14 @@
  */
 
 const { Storage } = require('./storage');
+const { logger } = require('./debug');
 
 class APISubmission {
-  constructor(agentRuntime, configManager, cryptoManager) {
+  constructor(agentRuntime, configManager, cryptoManager, dataDir) {
     this.agent = agentRuntime;
     this.config = configManager;
     this.crypto = cryptoManager;
-    this.storage = new Storage(agentRuntime);
+    this.storage = new Storage(dataDir || '.');
     this.queue = [];
     this.isProcessing = false;
     this.submissionKey = 'courtroom_api_queue';
@@ -82,19 +83,19 @@ class APISubmission {
   buildPayload(verdict) {
     // Transform proceedings array to expected dict format
     let proceedings = verdict.proceedings;
-    
+
     // If proceedings is an array of {speaker, message}, convert to dict format
     if (Array.isArray(proceedings)) {
       const judgeStatement = proceedings
         .filter(p => p.speaker === 'Judge')
         .map(p => p.message)
         .join('\n\n');
-      
+
       const juryMessages = proceedings
         .filter(p => p.speaker === 'Jury')
         .map(p => p.message)
         .join('\n\n');
-      
+
       proceedings = {
         judge_statement: judgeStatement || verdict.verdict.agentCommentary || '',
         evidence_summary: verdict.verdict.primaryFailure || '',
@@ -118,7 +119,7 @@ class APISubmission {
         ]
       };
     }
-    
+
     return {
       case_id: verdict.caseId,
       anonymized_agent_id: this.crypto.getAnonymizedAgentId(),
@@ -146,7 +147,7 @@ class APISubmission {
     try {
       while (this.queue.length > 0) {
         const submission = this.queue[0];
-        
+
         // Check if max retries reached
         if (submission.retries >= this.config.get('api.retryAttempts')) {
           this.queue.shift();
@@ -174,7 +175,7 @@ class APISubmission {
           submission.retries++;
           submission.lastAttempt = Date.now();
           submission.status = 'failed';
-          
+
           // Move to end of queue for retry
           this.queue.shift();
           this.queue.push(submission);
@@ -221,10 +222,10 @@ class APISubmission {
         return { success: false, error, status: response.status };
       }
     } catch (error) {
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: error.message,
-        isNetworkError: true 
+        isNetworkError: true
       };
     }
   }

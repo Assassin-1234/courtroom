@@ -1,151 +1,67 @@
 /**
- * Storage Utility
- * 
- * Provides a unified storage interface that falls back to file-based storage
- * when agent memory is not available (e.g., in ClawDBot skill mode).
+ * Storage — simple filesystem-backed key-value store
+ *
+ * All data lives under the given dataDir as JSON files.
+ * No external dependencies.
  */
 
 const fs = require('fs');
-const { getConfigDir } = require('./environment');
 const path = require('path');
 
-const STORAGE_FILE_PATH = path.join(getConfigDir(), 'courtroom_storage.json');
-
 class Storage {
-  constructor(agentRuntime) {
-    this.agent = agentRuntime;
-    this.useFileFallback = !agentRuntime || !agentRuntime.memory;
-    this.cache = null;
-  }
-
   /**
-   * Get value from storage
+   * @param {string} dataDir — absolute path to a writable directory
    */
-  async get(key) {
-    if (this.useFileFallback) {
-      return this.getFromFile(key);
-    } else {
-      try {
-        return await this.agent.memory.get(key);
-      } catch (err) {
-        return null;
-      }
-    }
-  }
-
-  /**
-   * Set value in storage
-   */
-  async set(key, value) {
-    if (this.useFileFallback) {
-      return this.setInFile(key, value);
-    } else {
-      try {
-        await this.agent.memory.set(key, value);
-      } catch (err) {
-        // Ignore
-      }
-    }
-  }
-
-  /**
-   * Delete value from storage
-   */
-  async delete(key) {
-    if (this.useFileFallback) {
-      return this.deleteFromFile(key);
-    } else {
-      try {
-        await this.agent.memory.delete(key);
-      } catch (err) {
-        // Ignore
-      }
-    }
-  }
-
-  /**
-   * Get from file storage
-   */
-  getFromFile(key) {
+  constructor(dataDir) {
+    this.dataDir = dataDir;
     try {
-      const data = this.loadFileData();
-      return data[key] || null;
-    } catch (err) {
+      if (!fs.existsSync(this.dataDir)) {
+        fs.mkdirSync(this.dataDir, { recursive: true });
+      }
+    } catch { /* ignore */ }
+  }
+
+  _filePath(key) {
+    // Sanitise key for filesystem
+    const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return path.join(this.dataDir, `${safeKey}.json`);
+  }
+
+  async get(key) {
+    try {
+      const file = this._filePath(key);
+      if (!fs.existsSync(file)) return null;
+      return JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
       return null;
     }
   }
 
-  /**
-   * Set in file storage
-   */
-  setInFile(key, value) {
+  async set(key, value) {
     try {
-      const data = this.loadFileData();
-      data[key] = value;
-      this.saveFileData(data);
+      const file = this._filePath(key);
+      fs.writeFileSync(file, JSON.stringify(value, null, 2));
     } catch (err) {
-      // Ignore
+      console.error(`[ClawTrial Storage] Write failed for ${key}:`, err.message);
     }
   }
 
-  /**
-   * Delete from file storage
-   */
-  deleteFromFile(key) {
+  async delete(key) {
     try {
-      const data = this.loadFileData();
-      delete data[key];
-      this.saveFileData(data);
-    } catch (err) {
-      // Ignore
-    }
+      const file = this._filePath(key);
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+    } catch { /* ignore */ }
   }
 
-  /**
-   * Load all data from file
-   */
-  loadFileData() {
-    if (this.cache !== null) {
-      return this.cache;
-    }
-    
+  async list(prefix) {
     try {
-      if (fs.existsSync(STORAGE_FILE_PATH)) {
-        const content = fs.readFileSync(STORAGE_FILE_PATH, 'utf8');
-        this.cache = JSON.parse(content);
-        return this.cache;
-      }
-    } catch (err) {
-      // Ignore parse errors
+      const files = fs.readdirSync(this.dataDir);
+      return files
+        .filter(f => f.endsWith('.json') && (!prefix || f.startsWith(prefix)))
+        .map(f => f.replace('.json', ''));
+    } catch {
+      return [];
     }
-    
-    this.cache = {};
-    return this.cache;
-  }
-
-  /**
-   * Save all data to file
-   */
-  saveFileData(data) {
-    try {
-      // Ensure directory exists
-      const dir = path.dirname(STORAGE_FILE_PATH);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      
-      fs.writeFileSync(STORAGE_FILE_PATH, JSON.stringify(data, null, 2));
-      this.cache = data;
-    } catch (err) {
-      // Ignore write errors
-    }
-  }
-
-  /**
-   * Clear cache (useful for testing)
-   */
-  clearCache() {
-    this.cache = null;
   }
 }
 
